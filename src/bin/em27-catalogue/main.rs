@@ -7,7 +7,7 @@ use itertools::Itertools;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use ggg_rs::{i2s, opus::{self, constants::bruker::BrukerBlockType, IgramHeader, MissingOpusParameterError}};
+use ggg_rs::{i2s, opus::{self, constants::bruker::BrukerBlockType, IgramHeader, MissingOpusParameterError}, interpolation::{ConstantValueInterp, InterpolationMethod}};
 use egi_rs::{coordinates::CoordinateSource, meteorology::{read_met_file, MetSource, Timezones, MetEntry}};
 
 type CatalogueResult<T> = error_stack::Result<T, CatalogueError>;
@@ -80,23 +80,47 @@ fn create_catalogue_entry_for_igram(igram: &Path, run: u32, coords: &CoordinateS
         .ok_or_else(|| CatalogueError::PathInvalidUnicode(igram.to_path_buf()))?
         .to_string();
 
-    // TODO: matchup met. Met is time ordered by load_met, so pick the closest met in time or interpolate (and error/skip if met data not available within required time).
+    // Interpolate met values to the interferograms
+    // TODO: these interpolation calls right now assume that an error is an out-of-bounds error, which should get a fill value. 
+    //  Really we should verify that is the case and log it; other errors should not result in fill values.
+    let interpolator = ConstantValueInterp::new(false);
+
+    let met_times = met.iter()
+        .map(|m| m.datetime)
+        .collect_vec();
+
+    let met_pres = met.iter()
+        .map(|m| m.pressure as f32)
+        .collect_vec();
+    let met_pres = interpolator.interp1d_to_time(met_times.as_slice(), met_pres.as_slice(), zpd_time)
+        .unwrap_or(CATALOGUE_FILL_FLOAT);
+
+    let met_temp = met.iter()
+        .map(|m| m.temperature as f32)
+        .collect_vec();
+    let met_temp = interpolator.interp1d_to_time(met_times.as_slice(), met_temp.as_slice(), zpd_time)
+        .unwrap_or(CATALOGUE_FILL_FLOAT);
+
+    let met_rh = met.iter()
+        .map(|m| m.humidity as f32)
+        .collect_vec();
+    let met_rh = interpolator.interp1d_to_time(met_times.as_slice(), met_rh.as_slice(), zpd_time)
+        .unwrap_or(CATALOGUE_FILL_FLOAT);
+
     let entry = i2s::OpusCatalogueEntry::build(igram_name)
         .with_time(zpd_time.year(), zpd_time.month(), zpd_time.day(), run)
         .change_context_lazy(|| CatalogueError::EntryCreationError(igram.to_path_buf()))?
         .with_coordinates(lat, lon, alt)
         .change_context_lazy(|| CatalogueError::EntryCreationError(igram.to_path_buf()))?
         .with_instrument(tins as f32, CATALOGUE_FILL_FLOAT, CATALOGUE_FILL_FLOAT)
+        .with_outside_met(met_temp, met_pres, met_rh)
         .finalize(CATALOGUE_FILL_FLOAT)
         .change_context_lazy(|| CatalogueError::EntryCreationError(igram.to_path_buf()))?;
 
-
-
-        
     Ok(entry)
 }
 
-/// Load the meteorology from the give file. The returned vector will be ordered by time.
+/// Load the meteorology from the given file.
 fn load_met(igrams: &[PathBuf], met_source: MetSource) -> CatalogueResult<Vec<MetEntry>> {
     // First check that all our interferograms have consistent timezones, since some met sources don't
     // record the time zone for their timestamps.
@@ -109,10 +133,11 @@ fn load_met(igrams: &[PathBuf], met_source: MetSource) -> CatalogueResult<Vec<Me
     }
 
     let timezones = Timezones::check_consistent_timezones(zpd_times.into_iter());
-    let mut met = read_met_file(&met_source, timezones)
+    let met = read_met_file(&met_source, timezones)
         .change_context_lazy(|| CatalogueError::MetError)?;
 
-    met.sort_by_key(|m| m.datetime);
+    // For now, I'm using interpolators that don't care if the input is ordered. If they get slow, we can change this.
+    // met.sort_by_key(|m| m.datetime);
 
     Ok(met)
 

@@ -4,6 +4,8 @@ use chrono::{FixedOffset, DateTime};
 use error_stack::Context;
 use serde::Deserialize;
 
+use ggg_rs::utils::EncodingError;
+
 use crate::path_relative_to_config;
 mod jpl_vaisala;
 
@@ -31,7 +33,7 @@ pub enum MetErrorType {
     /// This represents a problem reading the contents of the met file. This might include
     /// the file not existing or not being readable (due to permissions).
     #[error("Could not open/read file due to: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(#[from] EncodingError),
 
     #[error("Could not deserialize met config file: {0}")]
     DeserializationError(#[from] serde_json::Error),
@@ -53,7 +55,9 @@ pub enum MetErrorType {
 impl From<jpl_vaisala::JplMetError> for MetErrorType {
     fn from(value: jpl_vaisala::JplMetError) -> Self {
         match value {
-            jpl_vaisala::JplMetError::IoError(e) => MetErrorType::IoError(e),
+            jpl_vaisala::JplMetError::IoError(e) => MetErrorType::IoError(e.into()),
+            jpl_vaisala::JplMetError::EncodingError(e) => MetErrorType::IoError(e),
+            jpl_vaisala::JplMetError::HeaderLineMissing => MetErrorType::ParsingError(value.to_string()),
             jpl_vaisala::JplMetError::HeaderMissingFields(_) => MetErrorType::ParsingError(value.to_string()),
             jpl_vaisala::JplMetError::LineTooShort(_) => MetErrorType::ParsingError(value.to_string()),
             jpl_vaisala::JplMetError::ParsingError(_, _) => MetErrorType::ParsingError(value.to_string()),
@@ -118,7 +122,8 @@ impl MetSource {
     /// }
     /// ```
     pub fn from_config_json(config_file: &Path) -> Result<Self, MetErrorType> {
-        let reader = std::fs::File::open(config_file)?;
+        let reader = std::fs::File::open(config_file)
+            .map_err(|e| EncodingError::IoError(e))?;
         let this: Self = serde_json::from_reader(reader)?;
         match this {
             MetSource::JplVaisalaV1{file} => {

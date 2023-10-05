@@ -1,9 +1,11 @@
-use std::{path::Path, io::{BufRead, BufReader}, fmt::Display};
+use std::{path::Path, fmt::Display};
 
 use chrono::{FixedOffset, DateTime, NaiveDate, NaiveTime, TimeZone};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 use regex::Regex;
+
+use ggg_rs::utils::{read_unknown_encoding_file, EncodingError};
 
 use super::MetEntry;
 
@@ -11,6 +13,10 @@ use super::MetEntry;
 pub(super) enum JplMetError {
     #[error("Could not open file: {0}")]
     IoError(#[from] std::io::Error),
+    #[error("Could not decode contents of file: {0}")]
+    EncodingError(#[from] EncodingError),
+    #[error("JPL Vaisala file missing header line")]
+    HeaderLineMissing,
     #[error("JPL Vaisala file missing fields from the header: {}", .0.join(", "))]
     HeaderMissingFields(Vec<&'static str>),
     #[error("JPL Vaisala file has a line missing the {0} column")]
@@ -22,11 +28,12 @@ pub(super) enum JplMetError {
 }
 
 pub(super) fn read_jpl_vaisala_met(met_file: &Path, tz_offset: FixedOffset) -> Result<Vec<MetEntry>, JplMetError> {
-    let mut f = BufReader::new(std::fs::File::open(met_file)?);
+    let contents = read_unknown_encoding_file(met_file)?;
+    let mut lines = contents.as_str().lines();
 
     // Identify the indices for the quantities we care about
-    let mut header_line = String::new();
-    f.read_line(&mut header_line)?;
+    let header_line = lines.next()
+        .ok_or_else(|| JplMetError::HeaderLineMissing)?;
     let header_line = header_line.split(',').collect_vec();
     let column_inds = header_to_inds(&header_line)?;
 
@@ -34,8 +41,7 @@ pub(super) fn read_jpl_vaisala_met(met_file: &Path, tz_offset: FixedOffset) -> R
     // those are weird junk lines that happen usually at the start of the recording.
     let mut met_data = vec![];
     
-    for result in f.lines() {
-        let line = result?;
+    for line in lines {
         if line.contains('#') {
             // this is one of those junk lines
             continue;
