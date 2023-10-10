@@ -2,12 +2,13 @@ use std::path::{Path, PathBuf};
 
 use chrono::{NaiveDate, NaiveTime, DateTime, FixedOffset, TimeZone, Datelike};
 use clap::Parser;
+use clap_verbosity_flag::{Verbosity, WarnLevel};
 use error_stack::ResultExt;
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
-use ggg_rs::{i2s, opus::{self, constants::bruker::BrukerBlockType, IgramHeader, MissingOpusParameterError}, interpolation::{ConstantValueInterp, InterpolationMethod}};
+use ggg_rs::{i2s, opus::{self, constants::bruker::BrukerBlockType, IgramHeader, MissingOpusParameterError}, interpolation::{ConstantValueInterp, InterpolationMethod, InterpolationError}};
 use egi_rs::{coordinates::CoordinateSource, meteorology::{read_met_file, MetSource, Timezones, MetEntry}};
 
 type CatalogueResult<T> = error_stack::Result<T, CatalogueError>;
@@ -16,14 +17,38 @@ const CATALOGUE_FILL_FLOAT: f32 = -999.0;
 
 fn main() {
     let clargs = Cli::parse();
+
+    env_logger::Builder::new()
+    .filter_level(clargs.verbose.log_level_filter())
+    .init();
+
     let coords = CoordinateSource::load_file(&clargs.coordinate_file).unwrap();
-    let met = load_met(&clargs.interferograms, clargs.met_source).unwrap();
+    let surf_met_source = MetSource::from_config_json(&clargs.surface_met_source_file).unwrap();
+    let met = load_met(&clargs.interferograms, surf_met_source).unwrap();
+
+    let mut run_num = 1;
     let catalogue_entries: Vec<i2s::OpusCatalogueEntry> = clargs.interferograms
         .into_iter()
-        .enumerate()
-        .map(|(i, igm)| {
-            let run = 2*i as u32 + 1;
-            create_catalogue_entry_for_igram(&igm, run, &coords, &met)
+        .filter_map(|igm| {
+            // Three cases. (1) Successfully made a catalogue entry, add it to the list. (2) Should skip this entry,
+            // log than and do not add it to the list. (3) Other error, put it in the list so that try_collect() can
+            // return that error at the end.
+            match create_catalogue_entry_for_igram(&igm, run_num, &coords, &met, clargs.keep_if_missing_met) {
+                Ok(entry) => {
+                    // Only advance the run number if we successfully added the interferogram. We're assuming that there's
+                    // forward and reverse scans, so each interferogram should have two runs.
+                    run_num += 2;
+                    Some(Ok(entry))
+                },
+                Err(e) => {
+                    if let CatalogueError::SkippingIgram(igm, reason) = e.current_context() {
+                        log::warn!("Skipping {} because {}", igm.display(), reason);
+                        None
+                    } else {
+                        Some(Err(e))
+                    }
+                }
+            }
         })
         .try_collect()
         .unwrap();
@@ -32,12 +57,27 @@ fn main() {
     i2s::write_opus_catalogue_table(&mut stdout, &catalogue_entries, false).unwrap();
 }
 
+
+/// Generate an I2S catalogue for EM27 interferograms
 #[derive(Debug, clap::Parser)]
 struct Cli {
+    #[command(flatten)]
+    verbose: Verbosity<WarnLevel>,
+    
+    /// Set this flag to include an interferogram even if there isn't surface met data available to match up with it.
+    /// The default is to skip it, since GGG requires surface pressure to perform the retrieval.
+    #[clap(long)]
+    keep_if_missing_met: bool,
+
+    /// Path to a coordinates JSON file (required). See the documentation for [`CoordinateSource`] for allowed formats.
     #[clap(long="coords")]
     coordinate_file: PathBuf,
-    #[clap(long, value_parser = MetSource::from_clarg)]
-    met_source: MetSource,
+
+    /// Path to a surface met source description file (required). See the documentation for [`MetSource`] for allowed formats.
+    #[clap(long="surf-met",)]
+    surface_met_source_file: PathBuf,
+
+    /// Paths to the interferograms to add to the catalogue.
     interferograms: Vec<PathBuf>
 }
 
@@ -47,6 +87,8 @@ enum CatalogueError {
     EntryCreationError(PathBuf),
     #[error("Could not read met file")]
     MetError,
+    #[error("Skipping interferogram {0} because {1}")]
+    SkippingIgram(PathBuf, IgramSkipReason),
     #[error("Could not get the file name part of {0}")]
     PathMissingFileName(PathBuf),
     #[error("The path {0} contains invalid UTF-8 characters")]
@@ -59,7 +101,13 @@ enum CatalogueError {
     UnexpectedParameterFormat{block: BrukerBlockType, param: String, cause: String}
 }
 
-fn create_catalogue_entry_for_igram(igram: &Path, run: u32, coords: &CoordinateSource, met: &[MetEntry]) -> CatalogueResult<i2s::OpusCatalogueEntry> {
+#[derive(Debug, thiserror::Error)]
+enum IgramSkipReason {
+    #[error("surface met data could not be interpolated to the ZPD time")]
+    MetUnavailable
+}
+
+fn create_catalogue_entry_for_igram(igram: &Path, run: u32, coords: &CoordinateSource, met: &[MetEntry], keep_if_missing_met: bool) -> CatalogueResult<i2s::OpusCatalogueEntry> {
     let igram_header = opus::IgramHeader::read_full_igram_header(igram)
         .change_context_lazy(|| CatalogueError::EntryCreationError(igram.to_path_buf()))?;
     let zpd_time = get_zpd_time(&igram_header)
@@ -92,8 +140,21 @@ fn create_catalogue_entry_for_igram(igram: &Path, run: u32, coords: &CoordinateS
     let met_pres = met.iter()
         .map(|m| m.pressure as f32)
         .collect_vec();
-    let met_pres = interpolator.interp1d_to_time(met_times.as_slice(), met_pres.as_slice(), zpd_time)
-        .unwrap_or(CATALOGUE_FILL_FLOAT);
+    let met_pres_res = interpolator.interp1d_to_time(met_times.as_slice(), met_pres.as_slice(), zpd_time);
+    let met_pres = match met_pres_res {
+        Ok(v) => v,
+        Err(InterpolationError::OutOfDomain { left: _, right: _, out: _ }) => {
+            if keep_if_missing_met {
+                CATALOGUE_FILL_FLOAT
+            } else {
+                return Err(CatalogueError::SkippingIgram(igram.to_path_buf(), IgramSkipReason::MetUnavailable).into())
+            }
+        }
+        Err(e) => {
+            return Err(CatalogueError::EntryCreationError(igram.to_path_buf()))
+                .attach_printable_lazy(|| e);
+        }
+    };
 
     let met_temp = met.iter()
         .map(|m| m.temperature as f32)

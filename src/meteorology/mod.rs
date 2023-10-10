@@ -88,7 +88,17 @@ pub struct MetEntry {
 #[serde(tag = "type")]
 pub enum MetSource {
     /// Met data was recorded using the original version of the JPL Powershell script.
-    /// The expected file format is:
+    /// The JSON file corresponding to this variant would look like:
+    /// ```text
+    /// {
+    ///   "type": "JplVaisalaV1",
+    ///   "file": "./20230826_vaisala.txt"
+    /// }
+    /// ```
+    /// 
+    /// The value of "type" must be *exactly* "JplVaisalaV1". The value of "file" must
+    /// be a path that points to a file written by the JPL Powershell script. The expected
+    /// format of that file is:
     /// 
     /// ```text
     /// YYYYMMDD,HH:MM,Data,Temperature,Humidity,Pressure
@@ -96,6 +106,10 @@ pub enum MetSource {
     /// 20230826,16:15,0R2,Ta=26.8C,Ua=39.3P,Pa=972.7H
     /// 20230826,16:16,0R2,Ta=26.8C,Ua=40.3P,Pa=972.7H
     /// ```
+    /// 
+    /// If the path for "file" is relative, it is interpreted as relative to the location
+    /// of the met source file. That is, the example above means that the file
+    /// `20230826_vaisala.txt` must be in the same directory as the JSON file.
     JplVaisalaV1{file: PathBuf}
 }
 

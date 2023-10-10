@@ -15,12 +15,25 @@ pub enum CoordinateError {
 }
 
 
-/// An enum representing a source for geographic coordinates where the EM27 was located
+/// An enum representing a source for geographic coordinates where the EM27 was located.
+/// For all variants, longitude and latitude must be given in degrees with west and south,
+/// respectively, input as negative values. Altitude must be given in meters.
 #[derive(Debug, serde::Deserialize)]
 #[serde(untagged)]
 pub enum CoordinateSource {
     /// This indicates the EM27 was at a fixed location for all of the associated measurements.
-    /// It will return the same coordinates no matter what time is queried.
+    /// It will return the same coordinates no matter what time is queried. This corresponds to
+    /// a JSON file such as:
+    /// ```text
+    /// {
+    ///   "longitude": -118.17,
+    ///   "latitude": 34.20,
+    ///   "altitude": 338.0,
+    /// }
+    /// 
+    /// You may include additional keys with more information. A key "__comment__" with a description
+    /// of what these coordinates represent is strongly recommended.
+    /// ```
     Fixed{latitude: f32, longitude: f32, altitude: f32}
 }
 
