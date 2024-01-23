@@ -13,7 +13,7 @@ use egi_rs::{coordinates::CoordinateSource, meteorology::{read_met_file, MetSour
 
 type CatalogueResult<T> = error_stack::Result<T, CatalogueError>;
 
-const CATALOGUE_FILL_FLOAT: f32 = -999.0;
+const CATALOGUE_FILL_FLOAT: f32 = -99.0;
 
 fn main() {
     let clargs = Cli::parse();
