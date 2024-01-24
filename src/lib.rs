@@ -3,6 +3,8 @@ use std::path::{PathBuf, Path};
 pub mod coordinates;
 pub mod meteorology;
 
+pub const CATALOGUE_FILL_FLOAT_F32: f32 = -99.0;
+pub const CATALOGUE_FILL_FLOAT_F64: f64 = -99.0;
 
 /// If `p` is already an absolute path, return it unchanged. Otherwise, make it relative to
 /// the parent directory of `config_file`. 

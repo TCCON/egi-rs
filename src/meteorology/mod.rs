@@ -8,6 +8,7 @@ use ggg_rs::utils::EncodingError;
 
 use crate::path_relative_to_config;
 mod jpl_vaisala;
+mod cit_csv;
 
 
 /// This struct indicates an error while reading input met data and interpolating it to 
@@ -38,6 +39,9 @@ pub enum MetErrorType {
     #[error("Could not deserialize met config file: {0}")]
     DeserializationError(#[from] serde_json::Error),
 
+    #[error("Problem with the met config file: {0}")]
+    ConfigError(String),
+
     /// This represents a problem parsing the values stored in the met file
     #[error("Error during parsing: {0}")]
     ParsingError(String),
@@ -66,7 +70,23 @@ impl From<jpl_vaisala::JplMetError> for MetErrorType {
     }
 }
 
+impl From<cit_csv::CitMetError> for MetErrorType {
+    fn from(value: cit_csv::CitMetError) -> Self {
+        match value {
+            cit_csv::CitMetError::IoError(e) => MetErrorType::IoError(e.into()),
+            cit_csv::CitMetError::UnknownSite(_) => MetErrorType::ConfigError(value.to_string()),
+            cit_csv::CitMetError::HeaderLineMissing(_) => MetErrorType::ParsingError(value.to_string()),
+            cit_csv::CitMetError::UnexpectedColumn { file: _, col_index: _, expected: _ } => MetErrorType::ParsingError(value.to_string()),
+            cit_csv::CitMetError::LineTooShort(_, _) => MetErrorType::ParsingError(value.to_string()),
+            cit_csv::CitMetError::ParsingError { file: _, line: _, col: _, reason: _ } => MetErrorType::ParsingError(value.to_string()),
+            cit_csv::CitMetError::TimeMismatch { file1: _, file2: _, cause: _ } => MetErrorType::ParsingError(value.to_string()),
+            cit_csv::CitMetError::TimezoneError(_) => MetErrorType::ParsingError(value.to_string()),
+        }
+    }
+}
+
 /// A structure represting a single set of meteorology measurements for one time
+#[derive(Debug)]
 pub struct MetEntry {
     /// The time & date (with time zone) of the met data, note that it is assumed that
     /// the measurements are instantaneous at this time.
@@ -89,7 +109,7 @@ pub struct MetEntry {
 pub enum MetSource {
     /// Met data was recorded using the original version of the JPL Powershell script.
     /// The JSON file corresponding to this variant would look like:
-    /// ```text
+    /// ```json
     /// {
     ///   "type": "JplVaisalaV1",
     ///   "file": "./20230826_vaisala.txt"
@@ -110,7 +130,37 @@ pub enum MetSource {
     /// If the path for "file" is relative, it is interpreted as relative to the location
     /// of the met source file. That is, the example above means that the file
     /// `20230826_vaisala.txt` must be in the same directory as the JSON file.
-    JplVaisalaV1{file: PathBuf}
+    JplVaisalaV1{file: PathBuf},
+
+    /// Met data download from a Caltech weather station through http://tccon-weather.caltech.edu/index.php.
+    /// The JSON file corresponding to this variant would look like:
+    /// ```json
+    /// {
+    ///   "type": "CitCsvV1",
+    ///   "site": "ci",
+    ///   "pres_file": "./2023-06-23-Pressure.csv",
+    ///   "temp_file": "./2023-06-23-Temp.csv",
+    ///   "humid_file": "./2023-06-23-Humidity.csv"
+    /// }
+    /// ```
+    /// 
+    /// The value of "type" must be *exactly* "CitCsvV1". The value of "site" must be one
+    /// of "ci", "oc", "df", or "pa" and is the TCCON site from which the met data was
+    /// taken. The value of "pres_file" must be a path to a file downloaded from the above
+    /// URL with pressures for the day(s) you are making a catalog for. Its contents will be
+    /// similar to:
+    /// 
+    /// ```text
+    /// Time,"Pressure (mb)"
+    /// "2023-06-23 00:00:14",986.9
+    /// "2023-06-23 00:05:14",986.9
+    /// "2023-06-23 00:10:14",986.9
+    /// ```
+    /// 
+    /// "temp_file" and "humid_file" are optional (but highly recommended) and would point
+    /// to the files for temperature and humidity, respectively. If any of these paths are
+    /// relative, they are interpreted as relative to the configuration JSON file.
+    CitCsvV1{pres_file: PathBuf, site: String, temp_file: Option<PathBuf>, humid_file: Option<PathBuf>},
 }
 
 impl MetSource {
@@ -135,6 +185,18 @@ impl MetSource {
     ///   "file": "./20230826_vaisala.txt"
     /// }
     /// ```
+    /// 
+    /// A valid JSON for the `CitCsvV1` met source is:
+    /// 
+    /// ```json
+    /// {
+    ///   "type": "CitCsvV1",
+    ///   "site": "ci",
+    ///   "pres_file": "./2023-06-23-Pressure.csv",
+    ///   "temp_file": "./2023-06-23-Temp.csv",
+    ///   "humid_file": "./2023-06-23-Humidity.csv"
+    /// }
+    /// ```
     pub fn from_config_json(config_file: &Path) -> Result<Self, MetErrorType> {
         let reader = std::fs::File::open(config_file)
             .map_err(|e| EncodingError::IoError(e))?;
@@ -144,6 +206,12 @@ impl MetSource {
                 let file = path_relative_to_config(config_file, file);
                 Ok(Self::JplVaisalaV1{file})
             },
+            MetSource::CitCsvV1 { pres_file, site, temp_file, humid_file } => {
+                let pres_file = path_relative_to_config(config_file, pres_file);
+                let temp_file = temp_file.map(|p| path_relative_to_config(config_file, p));
+                let humid_file = humid_file.map(|p| path_relative_to_config(config_file, p));
+                Ok(Self::CitCsvV1 { pres_file, site, temp_file, humid_file })
+            }
         }
     }
 
@@ -168,6 +236,7 @@ impl MetSource {
     fn long_string(&self) -> String {
         match self {
             MetSource::JplVaisalaV1{file} => format!("JPL Vaisala V1 (file {})", file.display()),
+            MetSource::CitCsvV1 { pres_file, site, temp_file: _, humid_file: _ } => format!("CIT CSV V1 ({site}, pres_file = {})", pres_file.display()),
         }
     }
 }
@@ -176,6 +245,7 @@ impl Display for MetSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             MetSource::JplVaisalaV1{file: _} => write!(f, "JplVaisalaV1"),
+            MetSource::CitCsvV1 { pres_file: _, site: _, temp_file: _, humid_file: _ } => write!(f, "CitCsvV1"),
         }
     }
 }
@@ -232,15 +302,25 @@ impl Timezones {
 /// # Inputs
 /// - `met_file`: path to the file to be read
 pub fn read_met_file(met_type: &MetSource, em27_tz_offset: Timezones) -> Result<Vec<MetEntry>, MetError> {
-    let result = match met_type {
+    
+    match met_type {
         MetSource::JplVaisalaV1{file} => {
-            let tz = em27_tz_offset.try_unwrap_one()
-                .map_err(|reason| MetError{ met_source_type: met_type.to_owned(), reason})?;
+            let tz = get_em27_tz(em27_tz_offset, met_type)?;
             jpl_vaisala::read_jpl_vaisala_met(file, tz)
+                .map_err(|e| {
+                    MetError{met_source_type: met_type.to_owned(), reason: e.into()}
+                })
+        },
+        MetSource::CitCsvV1 { pres_file, site, temp_file, humid_file } => {
+            cit_csv::read_cit_csv_met(pres_file, site, temp_file.as_deref(), humid_file.as_deref())
+                .map_err(|e| {
+                    MetError{met_source_type: met_type.to_owned(), reason: e.into()}
+                })
         }
-    };
+    }
+}
 
-    result.map_err(|e| {
-        MetError{met_source_type: met_type.to_owned(), reason: e.into()}
-    })
+fn get_em27_tz(em27_tz_offset: Timezones, met_type: &MetSource) -> Result<FixedOffset, MetError> {
+    em27_tz_offset.try_unwrap_one()
+        .map_err(|reason| MetError{ met_source_type: met_type.to_owned(), reason})
 }

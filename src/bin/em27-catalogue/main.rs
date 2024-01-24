@@ -9,11 +9,10 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 use ggg_rs::{i2s, opus::{self, constants::bruker::BrukerBlockType, IgramHeader, MissingOpusParameterError}, interpolation::{ConstantValueInterp, InterpolationMethod, InterpolationError}};
-use egi_rs::{coordinates::CoordinateSource, meteorology::{read_met_file, MetSource, Timezones, MetEntry}};
+use egi_rs::{CATALOGUE_FILL_FLOAT_F32, coordinates::CoordinateSource, meteorology::{read_met_file, MetSource, Timezones, MetEntry}};
 
 type CatalogueResult<T> = error_stack::Result<T, CatalogueError>;
 
-const CATALOGUE_FILL_FLOAT: f32 = -99.0;
 
 fn main() {
     let clargs = Cli::parse();
@@ -145,7 +144,7 @@ fn create_catalogue_entry_for_igram(igram: &Path, run: u32, coords: &CoordinateS
         Ok(v) => v,
         Err(InterpolationError::OutOfDomain { left: _, right: _, out: _ }) => {
             if keep_if_missing_met {
-                CATALOGUE_FILL_FLOAT
+                CATALOGUE_FILL_FLOAT_F32
             } else {
                 return Err(CatalogueError::SkippingIgram(igram.to_path_buf(), IgramSkipReason::MetUnavailable).into())
             }
@@ -160,22 +159,22 @@ fn create_catalogue_entry_for_igram(igram: &Path, run: u32, coords: &CoordinateS
         .map(|m| m.temperature as f32)
         .collect_vec();
     let met_temp = interpolator.interp1d_to_time(met_times.as_slice(), met_temp.as_slice(), zpd_time)
-        .unwrap_or(CATALOGUE_FILL_FLOAT);
+        .unwrap_or(CATALOGUE_FILL_FLOAT_F32);
 
     let met_rh = met.iter()
         .map(|m| m.humidity as f32)
         .collect_vec();
     let met_rh = interpolator.interp1d_to_time(met_times.as_slice(), met_rh.as_slice(), zpd_time)
-        .unwrap_or(CATALOGUE_FILL_FLOAT);
+        .unwrap_or(CATALOGUE_FILL_FLOAT_F32);
 
     let entry = i2s::OpusCatalogueEntry::build(igram_name)
         .with_time(zpd_time.year(), zpd_time.month(), zpd_time.day(), run)
         .change_context_lazy(|| CatalogueError::EntryCreationError(igram.to_path_buf()))?
         .with_coordinates(lat, lon, alt)
         .change_context_lazy(|| CatalogueError::EntryCreationError(igram.to_path_buf()))?
-        .with_instrument(tins as f32, CATALOGUE_FILL_FLOAT, CATALOGUE_FILL_FLOAT)
+        .with_instrument(tins as f32, CATALOGUE_FILL_FLOAT_F32, CATALOGUE_FILL_FLOAT_F32)
         .with_outside_met(met_temp, met_pres, met_rh)
-        .finalize(CATALOGUE_FILL_FLOAT)
+        .finalize(CATALOGUE_FILL_FLOAT_F32)
         .change_context_lazy(|| CatalogueError::EntryCreationError(igram.to_path_buf()))?;
 
     Ok(entry)
