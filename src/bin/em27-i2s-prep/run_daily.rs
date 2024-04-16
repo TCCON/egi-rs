@@ -3,6 +3,7 @@ use std::{io::{BufReader, Read, Write}, path::{Path, PathBuf}};
 use error_stack::ResultExt;
 use ggg_rs::i2s::{self, I2SInputModifcations, I2SLineIter, I2SVersion};
 use egi_rs::i2s_catalog::make_catalogue_entries;
+use log::{debug, info, warn};
 
 use crate::{default_files, patterns::render_daily_pattern, CliError, DailyCli, DailyJsonCli, DetectorSet};
 
@@ -13,13 +14,16 @@ pub(crate) fn prep_daily_i2s_json(args: DailyJsonCli) -> error_stack::Result<(),
 
 pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError> {
     let mut glob_error_counts = vec![];
+    let mut input_files = vec![];
 
     let mut curr_date = args.start_date;
     if args.end_date < curr_date {
-        eprintln!("Warning: end date is before start date, no days will be prepared.");
+        warn!("Warning: end date is before start date, no days will be prepared.");
     }
 
     while curr_date <= args.end_date {
+        info!("Preparing I2S run for {curr_date}");
+
         // Set up the run directory with a spectrum output directory and the correct flimit file
         let (run_dir_path, igram_dir, top_edits) = setup_dirs(
             &args.common.igram_pattern,
@@ -27,10 +31,14 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
             args.common.detectors,
             &args.site_id,
             &args.common.utc_offset,
-            curr_date
+            curr_date,
+            args.clear,
         ).change_context_lazy(|| CliError::IoError(
             format!("Error setting up I2S run directory for date {curr_date}")
         ))?;
+
+        debug!("Interferograms will be read from {}", igram_dir.display());
+        debug!("Run directory will be {}", run_dir_path.display());
 
         // Load the default I2S top and apply the edits, writing to the run dir. 
         let i2s_input_path = run_dir_path.join("opus-i2s.in");
@@ -40,6 +48,7 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
             ))?;
 
         write_input_top(&mut i2s_input_file, &top_edits, args.common.top_file.as_deref())?;
+        debug!("I2S input top written to {}", i2s_input_path.display());
 
         // BUILD CATALOG:
         // Get the catalog of interferograms and to add the input file
@@ -70,12 +79,17 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
             .change_context_lazy(|| CliError::IoError(
                 format!("Error writing catalog in {}", i2s_input_path.display())
             ))?;
+        debug!("{} interferograms written to the catalog in {}", catalogue_entries.len(), i2s_input_path.display());
+
+        input_files.push(i2s_input_path);
 
         curr_date += chrono::Duration::days(1);
     }
 
+    write_parallel_file(&input_files, args.parallel_file)?;
+
     for (date, n) in glob_error_counts {
-        eprintln!("Warning: there were {n} files on {date} that could not be checked against the glob pattern, double check the catalog for {date}");
+        warn!("Warning: there were {n} files on {date} that could not be checked against the glob pattern, double check the catalog for {date}");
     }
 
     Ok(())
@@ -96,7 +110,7 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
 /// # Errors
 /// - if `igram_pattern` or `run_dir_pattern` are invalid (e.g. have an unknown substitution key), or
 /// - if there is an I/O error creating the needed output directories or flimit file
-fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet, site_id: &str, utc_offset: &str, curr_date: chrono::NaiveDate)
+fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet, site_id: &str, utc_offset: &str, curr_date: chrono::NaiveDate, clear_existing: bool)
 -> error_stack::Result<(PathBuf, PathBuf, I2SInputModifcations), CliError> {
     // Set up and create paths
     let mut igram_dir = render_daily_pattern(igram_pattern, curr_date, site_id)
@@ -104,13 +118,21 @@ fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet
     let igram_path = PathBuf::from(&igram_dir);
 
     if !PathBuf::from(&igram_dir).is_dir() {
-        eprintln!("Warning: interferogram path '{igram_dir}' is not a directory");
+        warn!("Warning: interferogram path '{igram_dir}' is not a directory");
     }
 
     let run_dir = render_daily_pattern(run_dir_pattern, curr_date, site_id)
         .change_context_lazy(|| CliError::BadInput("RUN_DIR_PATTERN is not valid".to_string()))?;
 
     let run_dir_path = PathBuf::from(&run_dir);
+    if clear_existing && run_dir_path.exists() {
+        std::fs::remove_dir_all(&run_dir_path)
+            .map(|_| info!("Deleted existing run directory {}", run_dir_path.display()))
+            .unwrap_or_else(|e| {
+                warn!("Failed to delete existing run directory {}, error was: {e}", run_dir_path.display())
+            });
+    }
+
     if !run_dir_path.exists() {
         std::fs::create_dir_all(&run_dir_path)
         .change_context_lazy(|| CliError::IoError(
@@ -139,7 +161,7 @@ fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet
     i2s_changes.set_parameter_change(2, spec_dir);
     i2s_changes.set_parameter_change(8, "./flimit.i2s".to_string());
     i2s_changes.set_parameter_change(9, format!("{site_id}YYYYMMDDS0e00C.RRRR"));
-    i2s_changes.set_parameter_change(20, utc_offset.to_string());
+    i2s_changes.set_parameter_change(19, utc_offset.to_string());
 
     // Go ahead and write the flimit file now
     let flimit_path = run_dir_path.join("flimit.i2s");
@@ -236,7 +258,7 @@ fn modify_i2s_head<R: Read, W: Write>(top: R, edits: &I2SInputModifcations, mut 
         ))?;
 
         if let Some(new_line) = edits.change_line_opt(line_type) {
-            write!(writer, "{}", new_line).change_context_lazy(|| CliError::IoError(
+            writeln!(writer, "{}", new_line).change_context_lazy(|| CliError::IoError(
                 "Error writing new line to I2S input file".to_string()
             ))?;
         } else {
@@ -245,5 +267,45 @@ fn modify_i2s_head<R: Read, W: Write>(top: R, edits: &I2SInputModifcations, mut 
             ))?;
         }
     }
+    Ok(())
+}
+
+fn write_parallel_file(input_files: &[PathBuf], parallel_file: PathBuf) -> error_stack::Result<(), CliError> {
+    let gggpath = ggg_rs::utils::get_ggg_path()
+        .change_context_lazy(|| CliError::BadInput(
+            "Could not get GGGPATH, ensure the environmental variable is set".to_string() 
+        ))?;
+    let gggpath = gggpath.to_str()
+        .ok_or_else(|| CliError::IoError(
+            "Could not convert GGGPATH value to valid UTF-8".to_string()
+        ))?;
+
+    let mut writer = std::fs::File::create(&parallel_file)
+        .change_context_lazy(|| CliError::IoError(
+            format!("Could not create parallel input file at {}", parallel_file.display())
+        ))?;
+
+    for file in input_files {
+        let run_dir = file.parent().ok_or_else(|| CliError::UnexpectedError(
+            format!("Could not get parent of input file {}", file.display())
+        ))?.to_str()
+        .ok_or_else(|| CliError::IoError(
+            "Could not convert run directory path to valid UTF-8".to_string()
+        ))?;
+
+        let input_file = file.file_name()
+            .ok_or_else(|| CliError::UnexpectedError(
+                format!("Could not get base name of input file {}", file.display())
+            ))?.to_str()
+            .ok_or_else(|| CliError::IoError(
+                "Could not convert base name of input file to valid UTF-8".to_string()
+            ))?;
+
+        writeln!(&mut writer, "cd {run_dir} && {gggpath}/bin/i2s {input_file} > i2s.log")
+            .change_context_lazy(|| CliError::IoError(
+                format!("Error occurred writing line for run directory {run_dir} to {}", parallel_file.display())
+            ))?;
+    }
+
     Ok(())
 }

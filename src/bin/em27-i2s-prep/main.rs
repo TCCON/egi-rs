@@ -1,6 +1,7 @@
 use std::{path::PathBuf, process::ExitCode, str::FromStr};
 
 use clap::{Parser, Args, Subcommand};
+use clap_verbosity_flag::{Verbosity, WarnLevel};
 
 use error_stack::ResultExt;
 use ggg_rs::i2s::{I2SHeaderEdit, I2SInputModifcations};
@@ -12,6 +13,11 @@ mod run_daily;
 
 fn main() -> ExitCode {
     let clargs = Cli::parse();
+
+    env_logger::Builder::new()
+    .filter_level(clargs.verbose.log_level_filter())
+    .init();
+
     let res = match clargs.command {
         PrepActions::Daily(args) => run_daily::prep_daily_i2s(args),
         PrepActions::DailyJson(json_args) => run_daily::prep_daily_i2s_json(json_args)
@@ -33,6 +39,8 @@ enum CliError {
     IoError(String),
     #[error("There was an error preparing the catalogue of interferograms.")]
     CatalogueError,
+    #[error("{0} (this was unexpected)")]
+    UnexpectedError(String),
 }
 
 // ---------------------- //
@@ -42,7 +50,10 @@ enum CliError {
 #[derive(Debug, Parser)]
 struct Cli {
     #[command(subcommand)]
-    command: PrepActions
+    command: PrepActions,
+
+    #[command(flatten)]
+    verbose: Verbosity<WarnLevel>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -65,6 +76,16 @@ struct DailyCli {
 
     /// The last date to process, in YYYY-MM-DD format.
     pub(crate) end_date: chrono::NaiveDate,
+
+    /// Where to write the file to drive the `parallel` utility to run I2S.
+    /// If not given, the default is to write to "multii2s.sh" in the current
+    /// directory.
+    #[clap(short='p', long, default_value = "multii2s.in")]
+    pub(crate) parallel_file: PathBuf,
+
+    /// If a run directory already exists, it is deleted and recreated. Use with care!
+    #[clap(long)]
+    pub(crate) clear: bool,
 }
 
 impl TryFrom<DailyJsonCli> for DailyCli {
@@ -79,7 +100,14 @@ impl TryFrom<DailyJsonCli> for DailyCli {
             .change_context_lazy(|| CliError::BadInput(
                 format!("The JSON file {} is not correct.", value.json_file.display())
             ))?;
-        Ok(DailyCli { common, site_id: value.site_id, start_date: value.start_date, end_date: value.end_date })
+        Ok(DailyCli {
+            common,
+            site_id: value.site_id,
+            start_date: value.start_date,
+            end_date: value.end_date,
+            parallel_file: value.parallel_file,
+            clear: value.clear
+        })
     }
 }
 
@@ -95,51 +123,61 @@ struct DailyJsonCli {
 
     /// The last date to process, in YYYY-MM-DD format.
     pub(crate) end_date: chrono::NaiveDate,
+
+    /// Where to write the file to drive the `parallel` utility to run I2S.
+    /// If not given, the default is to write to "multii2s.sh" in the current
+    /// directory.
+    #[clap(short='p', long, default_value = "multii2s.in")]
+    pub(crate) parallel_file: PathBuf,
+
+    /// If a run directory already exists, it is deleted and recreated. Use with care!
+    #[clap(long)]
+    pub(crate) clear: bool,
 }
 
 #[derive(Debug, Args, Deserialize)]
 struct DailyCommonArgs {
     /// A path with a date placeholder where interferograms are stored.
     /// 
-    /// This uses curly braces to indicate a placeholder. The only value
-    /// that can be inserted is the current date, and it will replace
-    /// instances of {DATE} in the pattern. A format can also be given
-    /// after a colon, e.g. {DATE:%Y%j} would be replaced with the four
+    /// This uses curly braces to indicate a placeholder. The current date
+    /// and the site ID can be inserted, replacing instances of {DATE}
+    /// and {SITE_ID}, respectively. A format can also be given after a colon
+    /// for DATE, e.g. {DATE:%Y%j} would be replaced with the four
     /// digit year and three digit day of year. If no format is given,
-    /// as in {DATE}, it defaults to YYYYMMDD format.
+    /// as in {DATE}, it defaults to YYYY-MM-DD format.
     /// 
-    /// Two examples, assuming that we a processing 1 Apr 2024,
-    /// "/data/{DATE}/igms" would resolve to "/data/20240401/igms",
-    /// while "/data/{DATE:%Y}/{DATE:%m}/{DATE:%d}/igms" would resolve to
-    /// "/data/2024/04/01/igms".
+    /// Two examples, assuming that we are processing 1 Apr 2024 with site ID "xx",
+    /// "/data/{DATE}/igms" would resolve to "/data/2024-04-01/igms",
+    /// while "/data/{SITE_ID}/{DATE:%Y}/{DATE:%m}/{DATE:%d}/igms" would 
+    /// resolve to "/data/xx/2024/04/01/igms".
     #[clap(short='i', long)]
     pub(crate) igram_pattern: String,
 
     /// A path with a date placeholder where I2S should be set up to run (required).
     /// 
-    /// These paths can substitute in the date using the same sort of patterns
+    /// These paths can substitute in value using the same sort of patterns
     /// as IGRAM_PATTERN.
     #[clap(short='o', long)]
     pub(crate) run_dir_pattern: String,
 
     /// A path with an optional date placeholder pointing to the coordinates JSON file (required).
     /// 
-    /// These paths can substitute in the date using the same sort of patterns
+    /// These paths can substitute in values using the same sort of patterns
     /// as IGRAM_PATTERN.
     #[clap(short='c', long)]
     pub(crate) coord_file_pattern: String,
 
     /// A path with a date placeholder pointing to the meteorology JSON file (required).
     /// 
-    /// These paths can substitute in the date using the same sort of patterns
+    /// These paths can substitute in values using the same sort of patterns
     /// as IGRAM_PATTERN.
     #[clap(short='m', long)]
     pub(crate) met_file_pattern: String,
 
     /// A glob pattern to append to IGRAM_PATTERN that should return all interferograms
-    /// for a given date (required). The same date placeholder pattern as allowed in 
-    /// IGRAM_PATTERN can be included if the date needs to be part of the glob pattern, e.g.
-    /// "ifg_{DATE}*" would search for files starting with "ifg_20240401" for 1 Apr 2024.
+    /// for a given date (required). The same placeholder patterns as allowed in 
+    /// IGRAM_PATTERN can be included, e.g. "ifg_{DATE:%Y%m%d}*" would search for files
+    /// starting with "ifg_20240401" for 1 Apr 2024.
     #[clap(short='g', long, default_value_t = String::from("*"))]
     pub(crate) igram_glob_pattern: String,
 

@@ -124,7 +124,7 @@ da
 
 0.0 00.0
 
-: Parameter #17 and #18 checks that the extreme igram values (MNY,MXY)
+: Parameter #17 checks that the extreme igram values (MNY,MXY)
 : within allowed limits. For an igram to be processed, both of
 : the following must be true:
 :       MNY > MN_thresh
@@ -138,7 +138,7 @@ da
 -1.005 -1.005   Min allowed igram values (Master, Slave)
 1.005 1.005   Max allowed igram values (Master, Slave)
 
-: Parameter #19 controls the data quality check based on the minimum
+: Parameter #18 controls the data quality check based on the minimum
 : value of the cross-correlation between runs.  There must be one entry
 : per data channel.
 : Setting a threshold to zero eliminates that particular check.
@@ -146,7 +146,7 @@ da
 
 0.8 0.8
 
-: Parameter #20 is the number of hours that must be added to the instrument
+: Parameter #19 is the number of hours that must be added to the instrument
 : time to compute UT.  This number is in floating point format to allow for
 : 1/2 hour time zones.  If the instrument is already set to UT (a very good idea)
 : simply set this parameter to 0.0.
@@ -154,14 +154,14 @@ da
 
 0.0
 
-: Parameter #21 sets the maximum number of scans analyzed in a single
+: Parameter #20 sets the maximum number of scans analyzed in a single
 : execution of the program.  The only use of this feature is to limit
 : the execution time for the diagnostic checks performed during the
 : night. Setting the count to zero eliminates this limit.
 
 0
 
-: Parameter #22 limits the max number of used points on the long
+: Parameter #21 limits the max number of used points on the long
 : side of the phase-corrected interferogram.  Together with LPCO, this
 : can set the spectral resolution.  A value greater than 4194304 (=2^22)
 : ensures that we use all points produced by the current IFS125HR.
@@ -171,7 +171,7 @@ da
 
 8388608  8388608
 
-: Parameter #23 sets the frequency limit for the SIV-correction
+: Parameter #22 sets the frequency limit for the SIV-correction
 : (i.e. the frequency below which any interferogram variations
 : will be considered to be source brightness fluctuations (SBF) and
 : removed, rather than interferometrically-modulated radiation).
@@ -193,7 +193,7 @@ da
 
 2500. 2500.
 
-: Parameter #24 is the type of laser sampling error (LSE, or "ghost correction")
+: Parameter #23 is the type of laser sampling error (LSE, or "ghost correction")
 : you wish to perform on each detector:
 :  0 = No correction is to be performed for this channel.
 :  1 = The slave channel (typically InGaAs) is to be used for this channel. Note
@@ -211,12 +211,12 @@ da
 
 0  0
 
-: Parameter #25 is the length of the phase correction operator.
+: Parameter #24 is the length of the phase correction operator.
 : It must be a power of 2, no larger than 131072
 
 1024  1024
 
-: Parameter #26 is the fractional intensity threshold for use of a
+: Parameter #25 is the fractional intensity threshold for use of a
 : spectral point in deriving the phase correction operator (PCO).
 : For example, a value of 0.001 means that only the low-resolution
 : points exceeding 0.1% of the peak spectral magnitude are used to
@@ -225,7 +225,7 @@ da
 
 0.001  0.001
 
-: Parameter #27 limits the amount of processing performed by the program.
+: Parameter #26 limits the amount of processing performed by the program.
 : This is useful in checking the early stages of the processing.
 : The following levels are currently supported:
 :   0 = perform no processing, just parse the input file
@@ -238,7 +238,7 @@ da
 
 4
 
-: Parameter #28 controls the verbosity of the program.
+: Parameter #27 controls the verbosity of the program.
 : Currently the following levels are defined:
 :   1 = display program name and error messages
 :   2 = adds display of warnings
@@ -248,7 +248,7 @@ da
 
 3
 
-:  Parameter #29 is the run number (the file name extension)
+:  Parameter #28 is the run number (the file name extension)
 :  of the first scan.  Normally this is 1. This only applies
 :  for slice-ipp.  It is ignored for opus-i2s which has the
 :  run numbers at the bottom of the file alongside each
@@ -263,4 +263,3 @@ da
 : giving as many starting entries as needed.
 : One can comment out old runs by placing a ':' in front of them.
 : Below is an example entry:
-: Spectrum_Name        year   mon   day   run   lat       lon         alt        Tins   Pins    Hins    Tout   Pout    Hout   SIA     FVSI       WSPD    WDIR  
