@@ -4,23 +4,29 @@ use error_stack::ResultExt;
 use ggg_rs::i2s::{self, I2SInputModifcations, I2SLineIter, I2SVersion};
 use egi_rs::i2s_catalog::make_catalogue_entries;
 
-use crate::{default_files, patterns::render_daily_pattern, CliError, DailyCli, DetectorSet};
+use crate::{default_files, patterns::render_daily_pattern, CliError, DailyCli, DailyJsonCli, DetectorSet};
 
+pub(crate) fn prep_daily_i2s_json(args: DailyJsonCli) -> error_stack::Result<(), CliError> {
+    let args: DailyCli = args.try_into()?;
+    prep_daily_i2s(args)
+}
 
 pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError> {
     let mut glob_error_counts = vec![];
 
-    let mut curr_date = args.common_args.start_date;
-    if args.common_args.end_date < curr_date {
+    let mut curr_date = args.start_date;
+    if args.end_date < curr_date {
         eprintln!("Warning: end date is before start date, no days will be prepared.");
     }
 
-    while curr_date <= args.common_args.end_date {
+    while curr_date <= args.end_date {
         // Set up the run directory with a spectrum output directory and the correct flimit file
         let (run_dir_path, igram_dir, top_edits) = setup_dirs(
-            &args.igram_pattern,
-            &args.run_dir_pattern,
-            args.common_args.detectors,
+            &args.common.igram_pattern,
+            &args.common.run_dir_pattern,
+            args.common.detectors,
+            &args.site_id,
+            &args.common.utc_offset,
             curr_date
         ).change_context_lazy(|| CliError::IoError(
             format!("Error setting up I2S run directory for date {curr_date}")
@@ -33,18 +39,18 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
                 format!("Could not create the I2S input file at {}", i2s_input_path.display())
             ))?;
 
-        write_input_top(&mut i2s_input_file, &top_edits, args.common_args.top_file.as_deref())?;
+        write_input_top(&mut i2s_input_file, &top_edits, args.common.top_file.as_deref())?;
 
         // BUILD CATALOG:
         // Get the catalog of interferograms and to add the input file
         
-        let coordinate_file = render_daily_pattern(&args.coord_file_pattern, curr_date)
+        let coordinate_file = render_daily_pattern(&args.common.coord_file_pattern, curr_date, &args.site_id)
             .map(PathBuf::from)
             .change_context_lazy(|| CliError::BadInput("COORD_FILE_PATTERN is not valid".to_string()))?;
-        let met_source_file = render_daily_pattern(&args.met_file_pattern, curr_date)
+        let met_source_file = render_daily_pattern(&args.common.met_file_pattern, curr_date, &args.site_id)
             .map(PathBuf::from)
             .change_context_lazy(|| CliError::BadInput("MET_FILE_PATTERN is not valid".to_string()))?;
-        let igram_glob = render_daily_pattern(&args.igram_glob_pattern, curr_date)
+        let igram_glob = render_daily_pattern(&args.common.igram_glob_pattern, curr_date, &args.site_id)
             .change_context_lazy(|| CliError::BadInput("IGRAM_GLOB_PATTERN is not valid".to_string()))?;
         let (interferograms, n_glob_errs) = glob_igrams(&igram_dir, &igram_glob)?;
 
@@ -90,10 +96,10 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
 /// # Errors
 /// - if `igram_pattern` or `run_dir_pattern` are invalid (e.g. have an unknown substitution key), or
 /// - if there is an I/O error creating the needed output directories or flimit file
-fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet, curr_date: chrono::NaiveDate)
+fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet, site_id: &str, utc_offset: &str, curr_date: chrono::NaiveDate)
 -> error_stack::Result<(PathBuf, PathBuf, I2SInputModifcations), CliError> {
     // Set up and create paths
-    let mut igram_dir = render_daily_pattern(igram_pattern, curr_date)
+    let mut igram_dir = render_daily_pattern(igram_pattern, curr_date, site_id)
         .change_context_lazy(|| CliError::BadInput("IGRAM_PATTERN is not valid".to_string()))?;
     let igram_path = PathBuf::from(&igram_dir);
 
@@ -101,7 +107,7 @@ fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet
         eprintln!("Warning: interferogram path '{igram_dir}' is not a directory");
     }
 
-    let run_dir = render_daily_pattern(run_dir_pattern, curr_date)
+    let run_dir = render_daily_pattern(run_dir_pattern, curr_date, site_id)
         .change_context_lazy(|| CliError::BadInput("RUN_DIR_PATTERN is not valid".to_string()))?;
 
     let run_dir_path = PathBuf::from(&run_dir);
@@ -132,6 +138,8 @@ fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet
     i2s_changes.set_parameter_change(1, igram_dir);
     i2s_changes.set_parameter_change(2, spec_dir);
     i2s_changes.set_parameter_change(8, "./flimit.i2s".to_string());
+    i2s_changes.set_parameter_change(9, format!("{site_id}YYYYMMDDS0e00C.RRRR"));
+    i2s_changes.set_parameter_change(20, utc_offset.to_string());
 
     // Go ahead and write the flimit file now
     let flimit_path = run_dir_path.join("flimit.i2s");
