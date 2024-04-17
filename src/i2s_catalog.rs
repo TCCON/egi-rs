@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::{collections::HashSet, fmt::Display, path::{Path, PathBuf}};
 
 use chrono::{NaiveDate, NaiveTime, DateTime, FixedOffset, TimeZone, Datelike};
 use error_stack::ResultExt;
@@ -248,4 +248,71 @@ fn get_zpd_time(header: &IgramHeader) -> error_stack::Result<DateTime<FixedOffse
             cause: format!("Date/time {date} {time} is invalid or ambiguous for offset {offset}")
         })?)
     
+}
+
+/// An error type for possible failures when getting a common timezone for multiple interferograms.
+/// (e.g. with [`get_common_igram_timezone`]).
+#[derive(Debug, thiserror::Error)]
+pub enum IgramTimezoneError {
+    /// Indicates no interferograms were provided (usually the input was an empty list)
+    NoIgrams,
+
+    /// Indicates that multiple time zones were found in the interferograms; all time zones
+    /// found are in the contained set.
+    Multiple(HashSet<FixedOffset>),
+
+    /// Indicates that an error occurred while reading the interferograms. This error type
+    /// is expected to be used inside an [`error_stack::Report`] so that the specific error
+    /// is carried as part of the report.
+    Error
+}
+
+impl Display for IgramTimezoneError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            IgramTimezoneError::NoIgrams => {
+                write!(f, "No interferograms provided")
+            }
+            IgramTimezoneError::Multiple(tzs) => {
+                write!(f, "Multiple timezones found in given interferograms: ")?;
+                for (idx, tz) in tzs.iter().enumerate() {
+                    if idx > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{tz}")?;
+                }
+                write!(f, "")
+            },
+            IgramTimezoneError::Error => write!(f, "An error occurred while getting interferogram timezones"),
+        }
+    }
+}
+
+
+/// Given a list of paths to interferograms, identify the timezone shared by them.
+/// 
+/// Errors if:
+/// - the interferogram header cannot be read,
+/// - the interferogram's time could not be parsed from the header,
+/// - the list of interferograms is empty, or
+/// - different interferograms had different timezones.
+pub fn get_common_igram_timezone<P: AsRef<Path>>(igrams: &[P]) -> error_stack::Result<FixedOffset, IgramTimezoneError> {
+    let mut timezones = HashSet::new();
+    for igm in igrams {
+        let igram_header = opus::IgramHeader::read_full_igram_header(igm.as_ref())
+            .change_context_lazy(|| IgramTimezoneError::Error)?;
+        let this_tz = get_zpd_time(&igram_header)
+            .map(|t| t.timezone())
+            .change_context_lazy(|| IgramTimezoneError::Error)?;
+        timezones.insert(this_tz);
+    }
+
+    if timezones.is_empty() {
+        Err(IgramTimezoneError::NoIgrams.into())
+    } else if timezones.len() > 1 {
+        Err(IgramTimezoneError::Multiple(timezones).into())
+    } else {
+        let tz = timezones.into_iter().next().unwrap();
+        Ok(tz)
+    }
 }

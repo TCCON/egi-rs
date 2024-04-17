@@ -2,7 +2,7 @@ use std::{io::{BufReader, Read, Write}, path::{Path, PathBuf}};
 
 use error_stack::ResultExt;
 use ggg_rs::i2s::{self, I2SInputModifcations, I2SLineIter, I2SVersion};
-use egi_rs::i2s_catalog::make_catalogue_entries;
+use egi_rs::i2s_catalog::{self, make_catalogue_entries};
 use log::{debug, info, warn};
 
 use crate::{default_files, patterns::render_daily_pattern, CliError, DailyCli, DailyJsonCli, DetectorSet};
@@ -25,17 +25,38 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
         info!("Preparing I2S run for {curr_date}");
 
         // Set up the run directory with a spectrum output directory and the correct flimit file
-        let (run_dir_path, igram_dir, top_edits) = setup_dirs(
+        let (run_dir_path, igram_dir, spec_dir) = setup_dirs(
             &args.common.igram_pattern,
             &args.common.run_dir_pattern,
             args.common.detectors,
             &args.site_id,
-            &args.common.utc_offset,
             curr_date,
             args.clear,
         ).change_context_lazy(|| CliError::IoError(
             format!("Error setting up I2S run directory for date {curr_date}")
         ))?;
+
+        // Get the paths to the interferograms, as we'll need them if a UTC offset wasn't specified.
+        let igram_glob = render_daily_pattern(&args.common.igram_glob_pattern, curr_date, &args.site_id)
+            .change_context_lazy(|| CliError::BadInput("IGRAM_GLOB_PATTERN is not valid".to_string()))?;
+        let (interferograms, n_glob_errs) = glob_igrams(&igram_dir, &igram_glob)?;
+
+        if n_glob_errs > 0 {
+            glob_error_counts.push((curr_date, n_glob_errs));
+        }
+
+        let mut i2s_changes = args.common.detectors.get_changes();
+        let igram_dir_str = igram_dir.to_str().ok_or_else(|| CliError::IoError("Could not convert interferogram path to valid UTF8".to_string()))?;
+        i2s_changes.set_parameter_change(1, igram_dir_str.to_string());
+        let spec_dir_str = spec_dir.to_str().ok_or_else(|| CliError::IoError("Could not convert spectrum path to valid UTF8".to_string()))?;
+        i2s_changes.set_parameter_change(2, spec_dir_str.to_string());
+        i2s_changes.set_parameter_change(8, "./flimit.i2s".to_string());
+        i2s_changes.set_parameter_change(9, format!("{}YYYYMMDDS0e00C.RRRR", args.site_id));
+        let utc_offset = get_utc_offset(args.common.utc_offset.as_deref(), &interferograms)
+            .change_context_lazy(|| CliError::BadInput(
+                format!("Could not determine a consistent timezone for interferograms on date {curr_date}")
+            ))?;
+        i2s_changes.set_parameter_change(19, utc_offset);
 
         debug!("Interferograms will be read from {}", igram_dir.display());
         debug!("Run directory will be {}", run_dir_path.display());
@@ -47,7 +68,7 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
                 format!("Could not create the I2S input file at {}", i2s_input_path.display())
             ))?;
 
-        write_input_top(&mut i2s_input_file, &top_edits, args.common.top_file.as_deref())?;
+        write_input_top(&mut i2s_input_file, &i2s_changes, args.common.top_file.as_deref())?;
         debug!("I2S input top written to {}", i2s_input_path.display());
 
         // BUILD CATALOG:
@@ -59,13 +80,6 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
         let met_source_file = render_daily_pattern(&args.common.met_file_pattern, curr_date, &args.site_id)
             .map(PathBuf::from)
             .change_context_lazy(|| CliError::BadInput("MET_FILE_PATTERN is not valid".to_string()))?;
-        let igram_glob = render_daily_pattern(&args.common.igram_glob_pattern, curr_date, &args.site_id)
-            .change_context_lazy(|| CliError::BadInput("IGRAM_GLOB_PATTERN is not valid".to_string()))?;
-        let (interferograms, n_glob_errs) = glob_igrams(&igram_dir, &igram_glob)?;
-
-        if n_glob_errs > 0 {
-            glob_error_counts.push((curr_date, n_glob_errs));
-        }
 
         let catalogue_entries = make_catalogue_entries(
             &coordinate_file, 
@@ -110,8 +124,8 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
 /// # Errors
 /// - if `igram_pattern` or `run_dir_pattern` are invalid (e.g. have an unknown substitution key), or
 /// - if there is an I/O error creating the needed output directories or flimit file
-fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet, site_id: &str, utc_offset: &str, curr_date: chrono::NaiveDate, clear_existing: bool)
--> error_stack::Result<(PathBuf, PathBuf, I2SInputModifcations), CliError> {
+fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet, site_id: &str, curr_date: chrono::NaiveDate, clear_existing: bool)
+-> error_stack::Result<(PathBuf, PathBuf, PathBuf), CliError> {
     // Set up and create paths
     let mut igram_dir = render_daily_pattern(igram_pattern, curr_date, site_id)
         .change_context_lazy(|| CliError::BadInput("IGRAM_PATTERN is not valid".to_string()))?;
@@ -156,12 +170,6 @@ fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet
     if !spec_dir.ends_with("/") {
         spec_dir.push('/');
     }
-    let mut i2s_changes = detectors.get_changes();
-    i2s_changes.set_parameter_change(1, igram_dir);
-    i2s_changes.set_parameter_change(2, spec_dir);
-    i2s_changes.set_parameter_change(8, "./flimit.i2s".to_string());
-    i2s_changes.set_parameter_change(9, format!("{site_id}YYYYMMDDS0e00C.RRRR"));
-    i2s_changes.set_parameter_change(19, utc_offset.to_string());
 
     // Go ahead and write the flimit file now
     let flimit_path = run_dir_path.join("flimit.i2s");
@@ -175,9 +183,10 @@ fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet
             format!("Error writing flimit file at {}", flimit_path.display())
         ))?;
 
-    Ok((run_dir_path, igram_path, i2s_changes))
+    Ok((run_dir_path, igram_path, spec_dir_path))
 }
 
+/// Get the list of interferograms matching a glob pattern
 fn glob_igrams(igram_path: &Path, igram_glob: &str) -> error_stack::Result<(Vec<PathBuf>, u64), CliError> {
     let mut igrams = vec![];
     let mut n_glob_err = 0;
@@ -199,6 +208,18 @@ fn glob_igrams(igram_path: &Path, igram_glob: &str) -> error_stack::Result<(Vec<
     }
 
     Ok((igrams, n_glob_err))
+}
+
+
+/// Get the UTC offset string for a set of interferograms
+fn get_utc_offset(user_utc_offset: Option<&str>, igram_paths: &[PathBuf]) -> error_stack::Result<String, i2s_catalog::IgramTimezoneError> {
+    if let Some(offset) = user_utc_offset {
+        return Ok(offset.to_string());
+    }
+
+    let igram_tz = i2s_catalog::get_common_igram_timezone(igram_paths)?;
+    let offset_hour = igram_tz.local_minus_utc() as f32 / 3600.0;
+    Ok(format!("{offset_hour:.2}"))
 }
 
 /// Write the top part of the I2S input file

@@ -202,8 +202,8 @@ struct DailyCommonArgs {
     /// The default is "0.0", which assumes your interferograms were
     /// collected by a computer with the time set to UTC. Negative values
     /// are permitted.
-    #[clap(short='u', long, default_value_t=String::from("0.0"), allow_negative_numbers = true)]
-    pub(crate) utc_offset: String,
+    #[clap(short='u', long, allow_negative_numbers = true)]
+    pub(crate) utc_offset: Option<String>,
 }
 
 
