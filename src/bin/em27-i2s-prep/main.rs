@@ -37,6 +37,8 @@ enum CliError {
     BadInput(String),
     #[error("I/O error: {0}")]
     IoError(String),
+    #[error("The interferogram directory {} does not exist", .0.display())]
+    MissingIgramDir(PathBuf),
     #[error("There was an error preparing the catalogue of interferograms.")]
     CatalogueError,
     #[error("{0} (this was unexpected)")]
@@ -60,7 +62,6 @@ struct Cli {
 enum PrepActions {
     Daily(DailyCli),
     DailyJson(DailyJsonCli)
-    // TODO: add prep daily v2 std subcommand that follows the JPL recommended structure
 }
 
 #[derive(Debug, Args)]
@@ -86,6 +87,12 @@ struct DailyCli {
     /// If a run directory already exists, it is deleted and recreated. Use with care!
     #[clap(long)]
     pub(crate) clear: bool,
+
+    /// If a date in the date range does not have an interferogram directory,
+    /// skip it rather than erroring. Useful when running a range where data
+    /// is not available every day.
+    #[clap(short='s', long)]
+    pub(crate) no_skip_missing_dates: bool,
 }
 
 impl TryFrom<DailyJsonCli> for DailyCli {
@@ -106,7 +113,8 @@ impl TryFrom<DailyJsonCli> for DailyCli {
             start_date: value.start_date,
             end_date: value.end_date,
             parallel_file: value.parallel_file,
-            clear: value.clear
+            clear: value.clear,
+            no_skip_missing_dates: value.no_skip_missing_dates
         })
     }
 }
@@ -133,6 +141,12 @@ struct DailyJsonCli {
     /// If a run directory already exists, it is deleted and recreated. Use with care!
     #[clap(long)]
     pub(crate) clear: bool,
+
+    /// If a date in the date range does not have an interferogram directory,
+    /// skip it rather than erroring. Useful when running a range where data
+    /// is not available every day.
+    #[clap(short='s', long)]
+    pub(crate) no_skip_missing_dates: bool,
 }
 
 #[derive(Debug, Args, Deserialize)]

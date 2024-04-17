@@ -264,7 +264,7 @@ pub enum IgramTimezoneError {
     /// Indicates that an error occurred while reading the interferograms. This error type
     /// is expected to be used inside an [`error_stack::Report`] so that the specific error
     /// is carried as part of the report.
-    Error
+    Error(PathBuf)
 }
 
 impl Display for IgramTimezoneError {
@@ -283,7 +283,7 @@ impl Display for IgramTimezoneError {
                 }
                 write!(f, "")
             },
-            IgramTimezoneError::Error => write!(f, "An error occurred while getting interferogram timezones"),
+            IgramTimezoneError::Error(p) => write!(f, "An error occurred while reading {}", p.display()),
         }
     }
 }
@@ -300,10 +300,10 @@ pub fn get_common_igram_timezone<P: AsRef<Path>>(igrams: &[P]) -> error_stack::R
     let mut timezones = HashSet::new();
     for igm in igrams {
         let igram_header = opus::IgramHeader::read_full_igram_header(igm.as_ref())
-            .change_context_lazy(|| IgramTimezoneError::Error)?;
+            .change_context_lazy(|| IgramTimezoneError::Error(igm.as_ref().to_owned()))?;
         let this_tz = get_zpd_time(&igram_header)
             .map(|t| t.timezone())
-            .change_context_lazy(|| IgramTimezoneError::Error)?;
+            .change_context_lazy(|| IgramTimezoneError::Error(igm.as_ref().to_owned()))?;
         timezones.insert(this_tz);
     }
 

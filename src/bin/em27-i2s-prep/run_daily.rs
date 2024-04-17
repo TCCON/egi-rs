@@ -25,16 +25,31 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
         info!("Preparing I2S run for {curr_date}");
 
         // Set up the run directory with a spectrum output directory and the correct flimit file
-        let (run_dir_path, igram_dir, spec_dir) = setup_dirs(
+        let res = setup_dirs(
             &args.common.igram_pattern,
             &args.common.run_dir_pattern,
             args.common.detectors,
             &args.site_id,
             curr_date,
             args.clear,
-        ).change_context_lazy(|| CliError::IoError(
-            format!("Error setting up I2S run directory for date {curr_date}")
-        ))?;
+        );
+
+        // A bit messy, but this unpacks the directories if everything worked, otherwise it checks
+        // if the reason it failed is because there is no input data for that day and we are allowed
+        // to just skip in that case, advance the loop.
+        let (run_dir_path, igram_dir, spec_dir) = match res {
+            Ok(dirs) => dirs,
+            Err(e) => match (e.current_context(), args.no_skip_missing_dates) {
+                (CliError::MissingIgramDir(_), false) => {
+                    info!("Interferogram directory for {curr_date} missing, assuming no data");
+                    curr_date += chrono::Duration::days(1);
+                    continue;
+                },
+                _ => return Err(e.change_context(CliError::IoError(
+                    format!("Error setting up I2S run directory for date {curr_date}")
+                ))),
+            },
+        };
 
         // Get the paths to the interferograms, as we'll need them if a UTC offset wasn't specified.
         let igram_glob = render_daily_pattern(&args.common.igram_glob_pattern, curr_date, &args.site_id)
@@ -131,8 +146,8 @@ fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet
         .change_context_lazy(|| CliError::BadInput("IGRAM_PATTERN is not valid".to_string()))?;
     let igram_path = PathBuf::from(&igram_dir);
 
-    if !PathBuf::from(&igram_dir).is_dir() {
-        warn!("Warning: interferogram path '{igram_dir}' is not a directory");
+    if !igram_path.is_dir() {
+        return Err(CliError::MissingIgramDir(igram_path).into());
     }
 
     let run_dir = render_daily_pattern(run_dir_pattern, curr_date, site_id)
