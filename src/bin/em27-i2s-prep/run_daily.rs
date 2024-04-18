@@ -61,10 +61,8 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
         }
 
         let mut i2s_changes = args.common.detectors.get_changes();
-        let igram_dir_str = igram_dir.to_str().ok_or_else(|| CliError::IoError("Could not convert interferogram path to valid UTF8".to_string()))?;
-        i2s_changes.set_parameter_change(1, igram_dir_str.to_string());
-        let spec_dir_str = spec_dir.to_str().ok_or_else(|| CliError::IoError("Could not convert spectrum path to valid UTF8".to_string()))?;
-        i2s_changes.set_parameter_change(2, spec_dir_str.to_string());
+        i2s_changes.set_parameter_change(1, ensure_trailing_path_sep(&igram_dir)?);
+        i2s_changes.set_parameter_change(2, ensure_trailing_path_sep(&spec_dir)?);
         i2s_changes.set_parameter_change(8, "./flimit.i2s".to_string());
         i2s_changes.set_parameter_change(9, format!("{}YYYYMMDDS0e00C.RRRR", args.site_id));
         let utc_offset = get_utc_offset(args.common.utc_offset.as_deref(), &interferograms)
@@ -142,7 +140,7 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
 fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet, site_id: &str, curr_date: chrono::NaiveDate, clear_existing: bool)
 -> error_stack::Result<(PathBuf, PathBuf, PathBuf), CliError> {
     // Set up and create paths
-    let mut igram_dir = render_daily_pattern(igram_pattern, curr_date, site_id)
+    let igram_dir = render_daily_pattern(igram_pattern, curr_date, site_id)
         .change_context_lazy(|| CliError::BadInput("IGRAM_PATTERN is not valid".to_string()))?;
     let igram_path = PathBuf::from(&igram_dir);
 
@@ -176,15 +174,6 @@ fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet
             format!("could not create spectrum output directory {}", spec_dir_path.display())
         ))?;
     }
-    let mut spec_dir = spec_dir_path.to_string_lossy().to_string();
-
-    // Set up our I2S edits. Remember that paths in GGG must end in a separator
-    if !igram_dir.ends_with("/") {
-        igram_dir.push('/');
-    }
-    if !spec_dir.ends_with("/") {
-        spec_dir.push('/');
-    }
 
     // Go ahead and write the flimit file now
     let flimit_path = run_dir_path.join("flimit.i2s");
@@ -199,6 +188,16 @@ fn setup_dirs(igram_pattern: &str, run_dir_pattern: &str, detectors: DetectorSet
         ))?;
 
     Ok((run_dir_path, igram_path, spec_dir_path))
+}
+
+fn ensure_trailing_path_sep(p: &Path) -> Result<String, CliError> {
+    let mut s = p.to_str().ok_or_else(|| CliError::IoError(
+        format!("Could not convert the following path to valid UTF-8: {}", p.display())
+    ))?.to_string();
+    if !s.ends_with(std::path::MAIN_SEPARATOR_STR) {
+        s.push(std::path::MAIN_SEPARATOR);
+    }
+    Ok(s)
 }
 
 /// Get the list of interferograms matching a glob pattern
