@@ -108,7 +108,7 @@ pub struct MetEntry {
 #[serde(tag = "type")]
 pub enum MetSource {
     /// Met data was recorded using the original version of the JPL Powershell script.
-    /// The JSON file corresponding to this variant would look like:
+    /// The minimum JSON file corresponding to this variant would look like:
     /// ```json
     /// {
     ///   "type": "JplVaisalaV1",
@@ -130,7 +130,19 @@ pub enum MetSource {
     /// If the path for "file" is relative, it is interpreted as relative to the location
     /// of the met source file. That is, the example above means that the file
     /// `20230826_vaisala.txt` must be in the same directory as the JSON file.
-    JplVaisalaV1{file: PathBuf},
+    /// 
+    /// By default, the times are assumed to be in the same time zone as the interferograms.
+    /// If not, use the "utc_offset" key to specify the offset from UTC in hours. For example,
+    /// for Pacific Daylight Time (7 hours behind UTC), a JSON file would have:
+    /// 
+    /// ```json
+    /// {
+    ///   "type": "JplVaisalaV1",
+    ///   "file": "./20230826_vaisala.txt",
+    ///   "utc_offset": -7.0
+    /// }
+    /// ```
+    JplVaisalaV1{file: PathBuf, utc_offset: Option<f32>},
 
     /// Met data download from a Caltech weather station through http://tccon-weather.caltech.edu/index.php.
     /// The JSON file corresponding to this variant would look like:
@@ -202,9 +214,9 @@ impl MetSource {
             .map_err(|e| EncodingError::IoError(e))?;
         let this: Self = serde_json::from_reader(reader)?;
         match this {
-            MetSource::JplVaisalaV1{file} => {
+            MetSource::JplVaisalaV1{file, utc_offset} => {
                 let file = path_relative_to_config(config_file, file);
-                Ok(Self::JplVaisalaV1{file})
+                Ok(Self::JplVaisalaV1{file, utc_offset})
             },
             MetSource::CitCsvV1 { pres_file, site, temp_file, humid_file } => {
                 let pres_file = path_relative_to_config(config_file, pres_file);
@@ -235,7 +247,7 @@ impl MetSource {
     /// Return a string including input paths suitable for display in error messages.
     fn long_string(&self) -> String {
         match self {
-            MetSource::JplVaisalaV1{file} => format!("JPL Vaisala V1 (file {})", file.display()),
+            MetSource::JplVaisalaV1{file, utc_offset} => format!("JPL Vaisala V1 (file {}{})", file.display(), utc_offset.map(|o| format!(" UTC{:+.1}", o)).unwrap_or_else(|| "".to_string())),
             MetSource::CitCsvV1 { pres_file, site, temp_file: _, humid_file: _ } => format!("CIT CSV V1 ({site}, pres_file = {})", pres_file.display()),
         }
     }
@@ -244,7 +256,7 @@ impl MetSource {
 impl Display for MetSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            MetSource::JplVaisalaV1{file: _} => write!(f, "JplVaisalaV1"),
+            MetSource::JplVaisalaV1{file: _, utc_offset: _} => write!(f, "JplVaisalaV1"),
             MetSource::CitCsvV1 { pres_file: _, site: _, temp_file: _, humid_file: _ } => write!(f, "CitCsvV1"),
         }
     }
@@ -304,8 +316,16 @@ impl Timezones {
 pub fn read_met_file(met_type: &MetSource, em27_tz_offset: Timezones) -> Result<Vec<MetEntry>, MetError> {
     
     match met_type {
-        MetSource::JplVaisalaV1{file} => {
-            let tz = get_em27_tz(em27_tz_offset, met_type)?;
+        MetSource::JplVaisalaV1{file, utc_offset} => {
+            let tz = if let Some(offset_hours) = utc_offset {
+                let secs = (offset_hours * 3600.0).round() as i32;
+                FixedOffset::east_opt(secs).ok_or_else(|| MetError{
+                    met_source_type: met_type.to_owned(),
+                    reason: MetErrorType::ConfigError(format!("UTC offset {offset_hours:+.2} is out of the allowed range (-24 to +24"))
+                })?
+            } else { 
+                get_em27_tz(em27_tz_offset, met_type)?
+            };
             jpl_vaisala::read_jpl_vaisala_met(file, tz)
                 .map_err(|e| {
                     MetError{met_source_type: met_type.to_owned(), reason: e.into()}
