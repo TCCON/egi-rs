@@ -18,17 +18,7 @@ It needs to include a number of pieces of information:
 Continuing on from the previous example, let's assume that we're processing data for the instrument with site ID "xx", and we have a directory structure like so:
 
 ```text
-/
-└── data
-    └── xx
-        ├── 20240401
-        │   ├── coords.json
-        │   ├── interferograms/
-        │   └── met_source.json
-        └── 20240402
-            ├── coords.json
-            ├── interferograms/
-            └── met_source.json
+{{#include dir-tree.txt}}
 ```
 
 We'll also assume that our interferograms include the date in their name,
