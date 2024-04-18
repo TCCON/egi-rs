@@ -137,13 +137,13 @@ fn create_catalogue_entry_for_igram(igram: &Path, run: u32, coords: &CoordinateS
     };
 
     let met_temp = met.iter()
-        .map(|m| m.temperature as f32)
+        .map(|m| m.temperature.map(|t| t as f32).unwrap_or(CATALOGUE_FILL_FLOAT_F32))
         .collect_vec();
     let met_temp = interpolator.interp1d_to_time(met_times.as_slice(), met_temp.as_slice(), zpd_time)
         .unwrap_or(CATALOGUE_FILL_FLOAT_F32);
 
     let met_rh = met.iter()
-        .map(|m| m.humidity as f32)
+        .map(|m| m.humidity.map(|rh| rh as f32).unwrap_or(CATALOGUE_FILL_FLOAT_F32))
         .collect_vec();
     let met_rh = interpolator.interp1d_to_time(met_times.as_slice(), met_rh.as_slice(), zpd_time)
         .unwrap_or(CATALOGUE_FILL_FLOAT_F32);

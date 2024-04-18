@@ -1,7 +1,7 @@
 use std::{path::{Path, PathBuf}, fmt::Display};
 
 use chrono::{FixedOffset, DateTime};
-use error_stack::Context;
+use error_stack::{Context, ResultExt};
 use serde::Deserialize;
 
 use ggg_rs::utils::EncodingError;
@@ -9,6 +9,7 @@ use ggg_rs::utils::EncodingError;
 use crate::path_relative_to_config;
 mod jpl_vaisala;
 mod cit_csv;
+mod legacy;
 
 
 /// This struct indicates an error while reading input met data and interpolating it to 
@@ -29,6 +30,7 @@ impl Display for MetError {
 impl Context for MetError {}
 
 /// An enum describing the reason interpolating met data to interferogram ZPDs failed
+/// TODO: migrate to using error_stack instead of having this internal error type.
 #[derive(Debug, thiserror::Error)]
 pub enum MetErrorType {
     /// This represents a problem reading the contents of the met file. This might include
@@ -53,7 +55,11 @@ pub enum MetErrorType {
     /// the met file has the same GMT offset as the interferograms it is being matched up with. When the
     /// interferograms have differing GMT offsets, this assumption is not straightforward.
     #[error("This met type requires that all interferograms being matched with it have the same time zone.")]
-    BadTimezoneError
+    BadTimezoneError,
+
+    /// Placeholder during migration to error_stack
+    #[error("see following error messages for cause")]
+    Stack,
 }
 
 impl From<jpl_vaisala::JplMetError> for MetErrorType {
@@ -85,6 +91,17 @@ impl From<cit_csv::CitMetError> for MetErrorType {
     }
 }
 
+impl From<legacy::LegacyMetError> for MetErrorType {
+    fn from(value: legacy::LegacyMetError) -> Self {
+        match value {
+            legacy::LegacyMetError::InvalidTimeFormat(_) => MetErrorType::ParsingError(value.to_string()),
+            legacy::LegacyMetError::InvalidTime(_) => MetErrorType::ParsingError(value.to_string()),
+            legacy::LegacyMetError::ReadError(_) => MetErrorType::ParsingError(value.to_string()),
+            legacy::LegacyMetError::CsvError(_) => MetErrorType::ParsingError(value.to_string()),
+        }
+    }
+}
+
 /// A structure represting a single set of meteorology measurements for one time
 #[derive(Debug)]
 pub struct MetEntry {
@@ -93,13 +110,35 @@ pub struct MetEntry {
     pub datetime: chrono::DateTime<chrono::FixedOffset>,
 
     /// Temperature in degrees Celsius
-    pub temperature: f64,
+    pub temperature: Option<f64>,
 
     /// Pressure in hPa
     pub pressure: f64,
 
     /// Relative humidity in percent (i.e. values should be in the range 0 to 100)
-    pub humidity: f64
+    pub humidity: Option<f64>
+}
+
+impl MetEntry {
+    #[allow(unused)] // used in testing
+    pub(crate) fn is_close(&self, other: &Self) -> bool {
+        if self.datetime != other.datetime { return false; }
+        if (self.pressure - other.pressure).abs() > 0.01 { return false; }
+        
+        if let (Some(ta), Some(tb)) = (self.temperature, other.temperature) {
+            if (ta - tb).abs() > 0.01 { return false;}
+        } else {
+            if self.temperature.is_none() != other.temperature.is_none() { return false; }
+        }
+
+        if let (Some(ha), Some(hb)) = (self.humidity, other.humidity) {
+            if (ha - hb).abs() > 0.01 { return false; }
+        } else {
+            if self.humidity.is_none() != other.humidity.is_none() { return false; }
+        }
+
+        true
+    }
 }
 
 
@@ -107,6 +146,64 @@ pub struct MetEntry {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type")]
 pub enum MetSource {
+    /// Met data is written using the EGI v1 comma-separated format
+    /// This is intended to support migration from EGI version 1 by reading 
+    /// files in (almost) the original format. **Note that the only recognized 
+    /// comment character is `#`**. EGI v1 allowed `#` or `:`, but to simplify
+    /// the reader code, `:` is no longer supported.
+    /// 
+    /// The minimum JSON file corresponding to this variant would look like:
+    /// ```json
+    /// {
+    ///   "type": "LegacyFileV1",
+    ///   "file": "./xa_met.txt"
+    /// }
+    /// ```
+    /// 
+    /// The value of "type" must be *exactly* "LegacyFileV1". The value of "file" must
+    /// be a path that points to a file written in the EGI v1 met format. The extension 
+    /// does not matter (i.e. it may be `.txt`, `.csv`, or anything else). If the path is
+    /// relative, it is interpreted as relative to the directory containing the JSON
+    /// file. The expected format of that file is a comma-separated file with the following
+    /// columns:
+    /// 
+    /// - one or a pair specifying the date and time (see below),
+    /// - "Pout", with surface pressure given in hPa,
+    /// - "Tout" (optional), with surface temperature given in degrees C
+    /// - "RH" (optional), with surface relative humidify given in percent
+    /// 
+    /// Time is to be specified in one of three ways:
+    /// 
+    /// 1. A single column named "CompSrlDate", which contains a Matlab date number.
+    ///    The Matlab date number for midnight 1 Jan 1970 is `719529`, and each day
+    ///    adds 1 to this value (i.e. 2 Jan 1970 is `719530`). This must give the
+    ///    date and time in the timezone used by the headers of the EM27 interferograms.
+    /// 2. A pair of columns named "CompDate" and "CompDate" which give the date in
+    ///    `%Y/%m/%d` format and the time in `%H:%M:%S` format, respectively. Thus
+    ///    16:14 on 26 Aug 2023 would have "2023/08/26" and "16:14:00". As with #1,
+    ///    the dates and times must be in the timezone used in the interferogram headers.
+    /// 3. A pair of columns named "UTCDate" and "UTCTime", which have the same format
+    ///    as #2, but are in UTC, rather than the interferograms' time zone.
+    /// 
+    /// The reader will prefer these in order, so "CompSrlDate" takes precedence if present,
+    /// then "CompDate" + "CompTime", and only if those are all absent are "UTCDate" + "UTCTime"
+    /// used. **Note that it is an error to have one but not both of "CompDate" and "CompTime",**
+    /// if only one of those is missing, EGI v2 will _not_ fall back on the UTC columns, as we
+    /// consider this likely to be a mistake. An example of a legacy met file that uses the UTC
+    /// columns is:
+    /// 
+    /// ```text
+    /// # This file was acquired in Pasadena, CA, USA on February 2, 2015
+    /// UTCDate,    UTCTime, WSPD, WDIR, SigTheta, Gust, Tout, RH, SFlux,  Pout, Precip, LeafWet, Battery, Bit,
+    /// 2015/02/10, 18:04:46, 0.0,    0,     0.0,   0.0, 19.9, 46,   0.0, 985.9,   0,      15,    13.7,   0,
+    /// 2015/02/10, 18:04:48, 0.0,    0,     0.0,   0.0, 19.9, 46,   0.0, 985.9,   0,      19,    13.7,   0,
+    /// 2015/02/10, 18:04:50, 0.0,    0,     0.0,   0.0, 19.9, 46,   0.0, 985.9,   0,      19,    13.7,   0,
+    /// 2015/02/10, 18:04:52, 0.0,    0,     0.0,   0.0, 19.9, 46,   0.0, 985.9,   0,      15,    13.7,   0,
+    /// ```
+    /// 
+    /// Note that this contains extra columns; such columns will be ignored.
+    LegacyFileV1 { file: PathBuf },
+
     /// Met data was recorded using the original version of the JPL Powershell script.
     /// The minimum JSON file corresponding to this variant would look like:
     /// ```json
@@ -214,6 +311,10 @@ impl MetSource {
             .map_err(|e| EncodingError::IoError(e))?;
         let this: Self = serde_json::from_reader(reader)?;
         match this {
+            MetSource::LegacyFileV1 { file } => {
+                let file = path_relative_to_config(config_file, file);
+                Ok(Self::LegacyFileV1 { file })
+            },
             MetSource::JplVaisalaV1{file, utc_offset} => {
                 let file = path_relative_to_config(config_file, file);
                 Ok(Self::JplVaisalaV1{file, utc_offset})
@@ -247,6 +348,7 @@ impl MetSource {
     /// Return a string including input paths suitable for display in error messages.
     fn long_string(&self) -> String {
         match self {
+            MetSource::LegacyFileV1 { file } => format!("Legacy V1 (file {})", file.display()),
             MetSource::JplVaisalaV1{file, utc_offset} => format!("JPL Vaisala V1 (file {}{})", file.display(), utc_offset.map(|o| format!(" UTC{:+.1}", o)).unwrap_or_else(|| "".to_string())),
             MetSource::CitCsvV1 { pres_file, site, temp_file: _, humid_file: _ } => format!("CIT CSV V1 ({site}, pres_file = {})", pres_file.display()),
         }
@@ -256,6 +358,7 @@ impl MetSource {
 impl Display for MetSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            MetSource::LegacyFileV1 { file: _ } => write!(f, "LegacyFileV1"),
             MetSource::JplVaisalaV1{file: _, utc_offset: _} => write!(f, "JplVaisalaV1"),
             MetSource::CitCsvV1 { pres_file: _, site: _, temp_file: _, humid_file: _ } => write!(f, "CitCsvV1"),
         }
@@ -313,9 +416,16 @@ impl Timezones {
 /// 
 /// # Inputs
 /// - `met_file`: path to the file to be read
-pub fn read_met_file(met_type: &MetSource, em27_tz_offset: Timezones) -> Result<Vec<MetEntry>, MetError> {
+pub fn read_met_file(met_type: &MetSource, em27_tz_offset: Timezones) -> error_stack::Result<Vec<MetEntry>, MetError> {
     
     match met_type {
+        MetSource::LegacyFileV1 { file } => {
+            let tz = get_em27_tz(em27_tz_offset, met_type)?;
+            legacy::read_legacy_met_csv(file, tz).change_context_lazy(|| {
+                MetError { met_source_type: met_type.to_owned(), reason: MetErrorType::Stack }
+            })
+        },
+
         MetSource::JplVaisalaV1{file, utc_offset} => {
             let tz = if let Some(offset_hours) = utc_offset {
                 let secs = (offset_hours * 3600.0).round() as i32;
@@ -328,13 +438,14 @@ pub fn read_met_file(met_type: &MetSource, em27_tz_offset: Timezones) -> Result<
             };
             jpl_vaisala::read_jpl_vaisala_met(file, tz)
                 .map_err(|e| {
-                    MetError{met_source_type: met_type.to_owned(), reason: e.into()}
+                    MetError{met_source_type: met_type.to_owned(), reason: e.into()}.into()
                 })
         },
+
         MetSource::CitCsvV1 { pres_file, site, temp_file, humid_file } => {
             cit_csv::read_cit_csv_met(pres_file, site, temp_file.as_deref(), humid_file.as_deref())
                 .map_err(|e| {
-                    MetError{met_source_type: met_type.to_owned(), reason: e.into()}
+                    MetError{met_source_type: met_type.to_owned(), reason: e.into()}.into()
                 })
         }
     }
