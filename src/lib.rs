@@ -1,4 +1,4 @@
-use std::path::{PathBuf, Path};
+use std::{env, path::{Path, PathBuf}};
 
 pub mod coordinates;
 pub mod meteorology;
@@ -21,4 +21,36 @@ pub(crate) fn path_relative_to_config(config_file: &Path, p: PathBuf) -> PathBuf
     } else {
         panic!("Could not get parent from path {}", config_file.display());
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum EgiPathError {
+    /// Indicates that no GGGPATH environmental variable was set in the current environment.
+    #[error("Neither EGIPATH nor egipath environmental variable set")]
+    NotSet,
+    /// Indicates that the path taken from the environment points to a directory that
+    /// doesn't exist at all. The contained [`PathBuf`] will be the path it expected.
+    #[error("Current EGIPATH ({}) does not exist", .0.display())]
+    DoesNotExist(PathBuf),
+    /// Indicated that the path taken from the environment points to *something* but that
+    /// something is not a directory. The contained [`PathBuf`] will be the path it checked.
+    #[error("Current EGIPATH ({}) is not a directory", .0.display())]
+    IsNotDir(PathBuf),
+}
+
+pub(crate) fn get_egi_path() -> Result<PathBuf, EgiPathError> {
+    let env_path = env::var_os("GGGPATH")
+        .or_else(|| env::var_os("gggpath"))
+        .ok_or_else(|| EgiPathError::NotSet)
+        .and_then(|p| Ok(PathBuf::from(p)))?;
+
+    if !env_path.exists() {
+        return Err(EgiPathError::DoesNotExist(env_path));
+    }
+
+    if !env_path.is_dir() {
+        return Err(EgiPathError::IsNotDir(env_path));
+    }
+
+    Ok(env_path)
 }
