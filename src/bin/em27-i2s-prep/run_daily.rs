@@ -61,8 +61,17 @@ pub(crate) fn prep_daily_i2s(args: DailyCli) -> error_stack::Result<(), CliError
         }
 
         let mut i2s_changes = args.common.detectors.get_changes();
-        i2s_changes.set_parameter_change(1, ensure_trailing_path_sep(&igram_dir)?);
-        i2s_changes.set_parameter_change(2, ensure_trailing_path_sep(&spec_dir)?);
+        let igm_dir_param = ensure_trailing_path_sep(&igram_dir).ok_or_else(|| CliError::BadInput(
+            format!("Could not encode {} as UTF-8", igram_dir.display())
+        ))?;
+        // Since our multii2s file ensures we CD into the run directory, it's better to make this relative
+        // so that if we move this directory later, the path still works.
+        let rel_spec_dir = spec_dir.strip_prefix(&run_dir_path).expect("spec_dir should be a subdirectory of run_dir");
+        let spec_dir_param = ensure_trailing_path_sep(rel_spec_dir).ok_or_else(|| CliError::BadInput(
+            format!("Could not encode {} as UTF-8", spec_dir.display())
+        ))?;
+        i2s_changes.set_parameter_change(1, igm_dir_param);
+        i2s_changes.set_parameter_change(2, spec_dir_param);
         i2s_changes.set_parameter_change(8, "./flimit.i2s".to_string());
         i2s_changes.set_parameter_change(9, format!("{}YYYYMMDDS0e00C.RRRR", args.site_id));
         let utc_offset = get_utc_offset(args.common.utc_offset.as_deref(), &interferograms)
@@ -232,7 +241,7 @@ fn get_utc_offset(user_utc_offset: Option<&str>, igram_paths: &[PathBuf]) -> err
     }
 
     let igram_tz = i2s_catalog::get_common_igram_timezone(igram_paths)?;
-    let offset_hour = igram_tz.local_minus_utc() as f32 / 3600.0;
+    let offset_hour = -igram_tz.local_minus_utc() as f32 / 3600.0;
     Ok(format!("{offset_hour:.2}"))
 }
 

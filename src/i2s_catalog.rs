@@ -17,9 +17,9 @@ pub fn make_catalogue_entries<P: AsRef<Path>>(coordinate_file: &Path, surface_me
     let coords = CoordinateSource::load_file(coordinate_file)
         .change_context_lazy(|| MainCatalogError::Coordinates)?;
     let surf_met_source = MetSource::from_config_json(surface_met_source_file)
-        .change_context_lazy(|| MainCatalogError::Met)?;
+        .change_context_lazy(|| MainCatalogError::Met(surface_met_source_file.to_path_buf()))?;
     let met = load_met(interferograms, surf_met_source)
-        .change_context_lazy(|| MainCatalogError::Met)?;
+        .change_context_lazy(|| MainCatalogError::Met(surface_met_source_file.to_path_buf()))?;
 
     let mut run_num = 1;
     let catalogue_entries: Vec<i2s::OpusCatalogueEntry> = interferograms
@@ -55,8 +55,8 @@ pub fn make_catalogue_entries<P: AsRef<Path>>(coordinate_file: &Path, surface_me
 pub enum MainCatalogError {
     #[error("Error loading EM27 coordinate file")]
     Coordinates,
-    #[error("Error loading EM27 meteorology information")]
-    Met,
+    #[error("Error loading EM27 meteorology information from {}", .0.display())]
+    Met(PathBuf),
     #[error("Error creating an EM27 catalog entry or writing the catalog")]
     Catalog,
 }
