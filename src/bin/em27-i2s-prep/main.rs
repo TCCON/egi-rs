@@ -200,6 +200,8 @@ struct DailyCommonArgs {
     /// Options are "single" (for a standard InGaAs detector only)
     /// and "dual" (for a standard InGaAs plus an extended InGaAs
     /// to cover the CO band).
+    /// TODO: make this optional, get from the interferogram headers
+    /// if not given.
     #[clap(short='d', long)]
     #[serde(deserialize_with = "deserialize_detector_set")]
     pub(crate) detectors: DetectorSet,
