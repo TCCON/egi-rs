@@ -4,7 +4,7 @@ use clap::Parser;
 use clap_verbosity_flag::{Verbosity, WarnLevel};
 use error_stack::ResultExt;
 use ggg_rs::i2s;
-use egi_rs::i2s_catalog::{make_catalogue_entries, MainCatalogError};
+use egi_rs::i2s_catalog::{make_catalog_entries, MainCatalogError};
 
 
 fn main() -> ExitCode {
@@ -25,7 +25,7 @@ fn main() -> ExitCode {
 }
 
 fn driver(clargs: Cli) -> error_stack::Result<(), MainCatalogError> {
-    let catalogue_entries = make_catalogue_entries(
+    let catalogue_entries = make_catalog_entries(
         &clargs.coordinate_file,
         &clargs.surface_met_source_file,
         &clargs.interferograms,

@@ -30,3 +30,6 @@ name = "em27-catalogue"
 
 [[bin]]
 name = "em27-i2s-prep"
+
+[[bin]]
+name = "em27-gfit-prep"

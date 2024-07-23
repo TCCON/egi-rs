@@ -8,7 +8,7 @@ use itertools::Itertools;
 
 use super::MetEntry;
 
-use crate::CATALOGUE_FILL_FLOAT_F64;
+use crate::CATALOG_FILL_FLOAT_F64;
 
 #[derive(Debug, thiserror::Error)]
 pub(super) enum CitMetError {
@@ -91,7 +91,7 @@ pub(super) fn read_cit_csv_met(
         check_times(&times, &ttime, pres_file, file)?;
         temp
     } else {
-        std::iter::repeat(CATALOGUE_FILL_FLOAT_F64).take(pressure.len()).collect_vec()
+        std::iter::repeat(CATALOG_FILL_FLOAT_F64).take(pressure.len()).collect_vec()
     };
 
     let humidity = if let Some(file) = humid_file {
@@ -99,7 +99,7 @@ pub(super) fn read_cit_csv_met(
         check_times(&times, &htime, pres_file, file)?;
         humid
     } else {
-        std::iter::repeat(CATALOGUE_FILL_FLOAT_F64).take(pressure.len()).collect_vec()
+        std::iter::repeat(CATALOG_FILL_FLOAT_F64).take(pressure.len()).collect_vec()
     };
 
     let mut met_entries = vec![];

@@ -1,8 +1,13 @@
 use once_cell::sync::Lazy;
 use regex::Regex;
-use crate::CliError;
 
-pub(crate) fn render_daily_pattern(pattern: &str, date: chrono::NaiveDate, site_id: &str) -> error_stack::Result<String, CliError> {
+#[derive(Debug, thiserror::Error)]
+pub enum PatternError {
+    #[error("Unknown key '{0}' in pattern string")]
+    UnknownKey(String)
+}
+
+pub fn render_daily_pattern(pattern: &str, date: chrono::NaiveDate, site_id: &str) -> error_stack::Result<String, PatternError> {
     static SUB_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{([^\}]+)\}").unwrap());
     let mut rendered = String::with_capacity(pattern.len());
     let mut last_match = 0;
@@ -17,7 +22,7 @@ pub(crate) fn render_daily_pattern(pattern: &str, date: chrono::NaiveDate, site_
     Ok(rendered)
 }
 
-fn do_pattern_replacement(fmt_str: &str, date: chrono::NaiveDate, site_id: &str) -> error_stack::Result<String, CliError> {
+fn do_pattern_replacement(fmt_str: &str, date: chrono::NaiveDate, site_id: &str) -> error_stack::Result<String, PatternError> {
     let mut split = fmt_str.splitn(2, ":");
     let key = split.next().expect("Should always be able to get at least one substring out of a format string");
     let fmt = split.next();
@@ -33,9 +38,7 @@ fn do_pattern_replacement(fmt_str: &str, date: chrono::NaiveDate, site_id: &str)
             Ok(site_id.to_string())
         },
         _ => {
-            Err(CliError::BadInput(
-                format!("Unknown key '{key}' in format placeholder")
-            ).into())
+            Err(PatternError::UnknownKey(key.to_string()).into())
         }
     }
 }
