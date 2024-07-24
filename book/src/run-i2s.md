@@ -11,9 +11,8 @@ It needs to include a number of pieces of information:
 
 - the directories where the interferograms are stored,
 - a glob pattern to select the interferograms in each directory,
-- the paths to the coordinate and meteorology JSON files,
-- where we want the run directories to be created, and
-- which set of detectors this EM27 has.
+- the paths to the coordinate and meteorology JSON files, and
+- where we want the run directories to be created.
 
 Continuing on from the previous example, let's assume that we're processing data for the instrument with site ID "xx", and we have a directory structure like so:
 
@@ -32,8 +31,7 @@ Let's create a JSON file named `demo.json` with the following contents:
   "igram_glob_pattern": "*{DATE:%Y%m%d}*",
   "coord_file_pattern": "/data/{SITE_ID}/{DATE:%Y%m%d}/coords.json",
   "met_file_pattern": "/data/{SITE_ID}/{DATE:%Y%m%d}/met_source.json",
-  "run_dir_pattern": "/data/{SITE_ID}/spectra/{DATE:%Y%m%d}",
-  "detectors": "dual"
+  "run_dir_pattern": "/data/{SITE_ID}/spectra/{DATE:%Y%m%d}"
 }
 ```
 
