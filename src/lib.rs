@@ -2,6 +2,7 @@ use std::path::{PathBuf, Path};
 
 pub mod coordinates;
 pub mod meteorology;
+pub mod i2s_catalog;
 
 pub const CATALOGUE_FILL_FLOAT_F32: f32 = -99.0;
 pub const CATALOGUE_FILL_FLOAT_F64: f64 = -99.0;

@@ -121,7 +121,7 @@ pub(super) fn read_cit_csv_met(
         let t = temperature[i];
         let h = humidity[i];
 
-        met_entries.push(MetEntry{ datetime, temperature: t, pressure: p, humidity: h})
+        met_entries.push(MetEntry{ datetime, temperature: Some(t), pressure: p, humidity: Some(h)})
     }
 
     Ok(met_entries)

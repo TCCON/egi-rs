@@ -1,0 +1,8 @@
+: This file lists the wavenumber limits of the spectrum files.
+: There must be one entry per data channel (detector).
+
+: Here is the line for InGaAs:
+4000.0 12500.0
+
+: And here is the one for InGaAs:
+4000.0 12500.0

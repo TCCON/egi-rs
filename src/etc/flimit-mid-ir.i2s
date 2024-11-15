@@ -1,0 +1,8 @@
+: This file lists the wavenumber limits of the spectrum files.
+: There must be one entry per data channel (detector).
+
+: Here is the line for InSb:
+500.0 7000.0
+
+: And here is the one for InSb:
+500.0 7000.0

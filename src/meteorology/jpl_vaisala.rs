@@ -53,7 +53,7 @@ pub(super) fn read_jpl_vaisala_met(met_file: &Path, tz_offset: FixedOffset) -> R
         let humidity = parse_line_numeric_part(&parts, Col::RH, &column_inds)?;
         let datetime = parse_line_datetime(&parts, &column_inds, tz_offset)?;
 
-        met_data.push(MetEntry { datetime, temperature, pressure, humidity })
+        met_data.push(MetEntry { datetime, temperature: Some(temperature), pressure, humidity: Some(humidity) })
     }
 
     Ok(met_data)
