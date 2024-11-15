@@ -1,0 +1,264 @@
+<!DOCTYPE HTML>
+<html lang="en" class="sidebar-visible no-js light">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Running I2S - The EGI v2 guide</title>
+                
+
+        <!-- Custom HTML head -->
+        
+
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff" />
+
+                <link rel="icon" href="favicon.svg">
+                        <link rel="shortcut icon" href="favicon.png">
+                <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+                <link rel="stylesheet" href="css/print.css" media="print">
+        
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+                <link rel="stylesheet" href="fonts/fonts.css">
+        
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+        
+            </head>
+    <body>
+        <!-- Provide site root to javascript -->
+        <script type="text/javascript">
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script type="text/javascript">
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script type="text/javascript">
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('no-js')
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add('js');
+        </script>
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script type="text/javascript">
+            var html = document.querySelector('html');
+            var sidebar = 'hidden';
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            }
+            html.classList.remove('sidebar-visible');
+            html.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><li class="part-title">Setup</li><li class="chapter-item expanded "><a href="installation.html"><strong aria-hidden="true">1.</strong> Installation</a></li><li class="chapter-item expanded affix "><li class="part-title">Converting interferograms to spectra</li><li class="chapter-item expanded "><a href="igm-coords.html"><strong aria-hidden="true">2.</strong> Location</a></li><li class="chapter-item expanded "><a href="igm-met.html"><strong aria-hidden="true">3.</strong> Surface meteorology</a></li><li class="chapter-item expanded "><a href="run-i2s.html" class="active"><strong aria-hidden="true">4.</strong> Running I2S</a></li><li class="chapter-item expanded "><a href="igm-common-errors.html"><strong aria-hidden="true">5.</strong> Troubleshooting interferogram conversion</a></li></ol>            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
+        </nav>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                
+                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky bordered">
+                    <div class="left-buttons">
+                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </button>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light (default)</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                                                <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                                            </div>
+
+                    <h1 class="menu-title">The EGI v2 guide</h1>
+
+                    <div class="right-buttons">
+                                                <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                                                                        
+                    </div>
+                </div>
+
+                                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+                
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script type="text/javascript">
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="running-i2s"><a class="header" href="#running-i2s">Running i2s</a></h1>
+<p>Now that all of the original data is prepared, it's time to set up and run I2S, which converts the interferograms into spectra.
+We use the <code>em27-i2s-prep</code> program to set up run directories and scripts for I2S.
+This has several subcommands which are useful in different cases.
+For this example, we'll use the <code>daily-json</code> subcommand.
+This allows us to set up to run each day's worth of interferograms in parallel, with the configuration we need for that included in (yet another) JSON file.</p>
+<p>First we need to prepare the JSON file.
+It needs to include a number of pieces of information:</p>
+<ul>
+<li>the directories where the interferograms are stored,</li>
+<li>a glob pattern to select the interferograms in each directory,</li>
+<li>the paths to the coordinate and meteorology JSON files, and</li>
+<li>where we want the run directories to be created.</li>
+</ul>
+<p>Continuing on from the previous example, let's assume that we're processing data for the instrument with site ID &quot;xx&quot;, and we have a directory structure like so:</p>
+<pre><code class="language-text">/
+└── data
+    └── xx
+        ├── 20240401
+        │   ├── coords.json
+        │   ├── interferograms/
+        │   └── met_source.json
+        └── 20240402
+            ├── coords.json
+            ├── interferograms/
+            └── met_source.json
+</code></pre>
+<p>We'll also assume that our interferograms include the date in their name,
+that we want to create run directories like <code>/data/xx/spectra/20240401</code> to run I2S in,
+and that our EM27 has the dual InGaAs detector that supports retrieving CO.
+Let's create a JSON file named <code>demo.json</code> with the following contents:</p>
+<pre><code class="language-json">{
+  &quot;igram_pattern&quot;: &quot;/data/{SITE_ID}/{DATE:%Y%m%d}/interferograms/&quot;,
+  &quot;igram_glob_pattern&quot;: &quot;*{DATE:%Y%m%d}*&quot;,
+  &quot;coord_file_pattern&quot;: &quot;/data/{SITE_ID}/{DATE:%Y%m%d}/coords.json&quot;,
+  &quot;met_file_pattern&quot;: &quot;/data/{SITE_ID}/{DATE:%Y%m%d}/met_source.json&quot;,
+  &quot;run_dir_pattern&quot;: &quot;/data/{SITE_ID}/spectra/{DATE:%Y%m%d}&quot;
+}
+</code></pre>
+<p>Notice that our values have some parts in curly braces, namely <code>{SITE_ID}</code> and <code>{DATE:%Y%m%d}</code>.
+These are <em>placeholders</em>, which will have the actual value substituted in for each date processed.
+<code>{SITE_ID}</code> will be replaced with our two-letter site ID, <code>xx</code>, when we pass it on the command line.
+<code>{DATE}</code> will be replaced with each date that we want to process.
+The <code>{DATE}</code> placeholders also include an extra part, the <code>:%Y%m%d</code>.
+This specifies the format the date should have; &quot;%Y&quot; means the 4-digit year, &quot;%m&quot; the 2-digit month, and &quot;%d&quot; the 2-digit day.
+We use the <code>chrono</code> crate for dates, so all the format specifiers listed <a href="https://docs.rs/chrono/latest/chrono/format/strftime/index.html">on their strftime page</a> can be used.
+Other characters can be included as well, e.g. <code>%Y.%m.%d</code> would print &quot;2024.04.01&quot; for 1 Apr 2024.
+With no format, <code>{DATE}</code> defaults to <code>%Y-%m-%d</code> format.</p>
+<p>Now we can run <code>em27-i2s-prep</code> to create our run directories.
+Assuming we want to run the 1st, 2nd, and 3rd of Apr 2024, the command is:</p>
+<pre><code class="language-bash">$ em27-i2s-prep daily-json demo.json xx 2024-04-01 2024-04-03
+</code></pre>
+<p>Note that the start and end dates <em>must</em> be given in the YYYY-MM-DD, a.k.a. %Y-%m-%d format for command line arguments.
+This may take a minute or two to run (it inspects the headers of every interferogram, which adds up with a lot of them), but will create:</p>
+<ul>
+<li>three run directories: <code>20240401</code>, <code>20240402</code>, and <code>20240403</code> in <code>/data/xx/spectra</code>, and</li>
+<li>a <code>multii2s.sh</code> file in your current directory.</li>
+</ul>
+<p>The <code>multii2s.sh</code> file is a script that will run each day's interferograms through I2S.
+It can be run in serial with <code>bash multii2s.sh</code>, but if your system has the <a href="https://doi.org/10.5281/zenodo.1146014"><code>parallel</code> tool</a>, we can run the days in parallel with the command:</p>
+<pre><code class="language-bash">$ parallel -t --delay=1 -j4 &lt; multii2s.sh
+</code></pre>
+<p>The <code>-j</code> argument specifies how many concurrent tasks to run, here we use 4, but you can use more or less (depending on your system).
+Note that, if you are working over an SSH connection, it may be a good idea to run this command in something like <a href="https://www.gnu.org/software/screen/">screen</a>
+so that you can disconnect and let it keep running.
+Depending on the number of days and interferograms per day, this step could take minutes or a few hours.
+When it completes, you will have spectra in each of the run directories.</p>
+<p>Now we're ready to run the level 2 retrieval.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                                                    <a rel="prev" href="igm-met.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+                        
+                                                    <a rel="next" href="igm-common-errors.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+                        
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                                    <a rel="prev" href="igm-met.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+                
+                                    <a rel="next" href="igm-common-errors.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+                            </nav>
+
+        </div>
+
+        
+        
+        
+                <script type="text/javascript">
+            window.playground_copyable = true;
+        </script>
+        
+        
+                <script src="elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="mark.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="searcher.js" type="text/javascript" charset="utf-8"></script>
+        
+        <script src="clipboard.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="highlight.js" type="text/javascript" charset="utf-8"></script>
+        <script src="book.js" type="text/javascript" charset="utf-8"></script>
+
+        <!-- Custom JS scripts -->
+        
+        
+    </body>
+</html>
