@@ -8,7 +8,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: XAMPPRocky/deploy-mdbook@v1.1
+
+      - name: Setup mdBook
+        uses: peaceiris/actions-mdbook@v2
         with:
-            workspace: "$GITHUB_WORKSPACE/book"
-            token: ${{ secrets.GITHUB_TOKEN }}
+          # mdbook-version: '0.4.37'
+          mdbook-version: 'latest'
+
+      - run: mdbook build "./book"
+      - run: ls ./book/book/index.html
+      - name: Deploy
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: "./book/book"
