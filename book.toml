@@ -1,6 +1,0 @@
-[book]
-authors = ["Joshua Laughner"]
-language = "en"
-multilingual = false
-src = "src"
-title = "The EGI v2 guide"
