@@ -128,8 +128,10 @@ fn create_catalog_entry_for_igram(igram: &Path, run: u32, coords: &CoordinateSou
 
     let (lat, lon, alt) = coords.get_coords_for_datetime(zpd_time);
 
-    // EM27s only seem to record their instrument temperature, not humidity or pressure
-    // (which I guess can reasonably be assumed to match the exterior conditions)
+    // EM27s only seem to record their instrument temperature, not humidity or pressure.
+    // The latter two must be assumed to match exterior conditions. This does mean that if
+    // a pressure correction is applied from the sunrun.dat file, it won't be applied to the
+    // pins header value, so TODO: adjust pins if pcorr in sunrun.dat is not 0.
     let tins: f64 = igram_header.get_value(BrukerBlockType::InstrumentStatus, "TSC")
         .map_err(|e| CatalogError::from(e))?
         .as_float()
@@ -182,12 +184,13 @@ fn create_catalog_entry_for_igram(igram: &Path, run: u32, coords: &CoordinateSou
         .unwrap_or(CATALOG_FILL_FLOAT_F32);
 
     // Finalize just checks that the required year, month, day, run were present, so that shouldn't error.
+    // The other setters might though.
     let entry = i2s::OpusCatalogueEntry::build(igram_name)
         .with_time(zpd_time.year(), zpd_time.month(), zpd_time.day(), run)
         .change_context_lazy(|| CatalogError::EntryCreationError(igram.to_path_buf()))?
         .with_coordinates(lat, lon, alt)
         .change_context_lazy(|| CatalogError::EntryCreationError(igram.to_path_buf()))?
-        .with_instrument(tins as f32, CATALOG_FILL_FLOAT_F32, CATALOG_FILL_FLOAT_F32)
+        .with_instrument(tins as f32, met_pres, met_rh)
         .with_outside_met(met_temp, met_pres, met_rh)
         .finalize(CATALOG_FILL_FLOAT_F32)
         .change_context_lazy(|| CatalogError::EntryCreationError(igram.to_path_buf()))?;

@@ -480,6 +480,7 @@ dependencies = [
  "approx",
  "chrono",
  "clap",
+ "clap-verbosity-flag",
  "encoding",
  "error-stack",
  "fortformat",

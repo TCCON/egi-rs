@@ -164,8 +164,10 @@ impl DetectorSet {
         ))?;
 
         let instrument = if let BrukerParValue::String(instr) = instrument {
+            log::debug!("INS parameter value in {} = {instr}", interferogram.file_name().map(|s| s.to_string_lossy()).unwrap_or_default());
             instr
         } else {
+            log::debug!("INS parameter value in {} was not a string", interferogram.file_name().map(|s| s.to_string_lossy()).unwrap_or_default());
             ""
         };
 
@@ -179,19 +181,24 @@ impl DetectorSet {
         // distinguish ones with and without the dual detector from the instrument name.
         // Instead, check the number of data points in the second channel; if this is present and
         // not 0, then we *should* have an extended InGaAs detector
+        // TODO: test on some of the early Caltech data with only one detector (/oco2-data/tccon/data/caltech_em27)
+        // to ensure this is reading the right NPT parameter.
         let npt2_res = header.get_value(
             opus::constants::bruker::BrukerBlockType::IgramSecondaryStatus,
-            "NPT2"
+            "NPT"
         );
         let npt2 = match npt2_res {
-            Ok(BrukerParValue::Integer(v)) => *v,
+            Ok(BrukerParValue::Integer(v)) => {
+                log::debug!("NPT2 parameter value in {} = {v}", interferogram.file_name().map(|s| s.to_string_lossy()).unwrap_or_default());
+                *v
+            },
+            Err(_) => {
+                log::debug!("NPT2 parameter was not present in {}, using 0 to determine detectors", interferogram.file_name().map(|s| s.to_string_lossy()).unwrap_or_default());
+                0
+            },
             Ok(value) => return Err(CommonConfigError::IoError(
                 format!("Unexpected type for NPT2 parameter in {}, expected integer, got {}", interferogram.display(), value.opus_type())
             )),
-            Err(_) => {
-                log::debug!("Did not find NPT2 parameter in {}, assuming no second detector", interferogram.display());
-                0
-            }
         };
 
         if npt2 == 0 {
