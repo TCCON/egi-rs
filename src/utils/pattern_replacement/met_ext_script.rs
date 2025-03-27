@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use chrono::{DateTime, FixedOffset};
 
 use super::{PatternError, PatternReplacer};
@@ -22,17 +24,17 @@ struct MetArgReplacer {
 }
 
 impl PatternReplacer for MetArgReplacer {
-    fn get_replacement_value(&self, key: &str, fmt: Option<&str>) -> Result<String, PatternError> {
+    fn get_replacement_value(&self, key: &str, fmt: Option<&str>) -> Result<Cow<'_, str>, PatternError> {
         match key {
             "FIRST_IGRAM_TIME" => {
                 let fmt = fmt.unwrap_or(DEFAULT_TIME_FMT);
                 let timestr = self.first_igram_time.format(fmt).to_string();
-                Ok(timestr)
+                Ok(timestr.into())
             }
             "LAST_IGRAM_TIME" => {
                 let fmt = fmt.unwrap_or(DEFAULT_TIME_FMT);
                 let timestr = self.last_igram_time.format(fmt).to_string();
-                Ok(timestr)
+                Ok(timestr.into())
             }
             _ => Err(PatternError::UnknownKey(key.to_string())),
         }

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use super::{PatternError, PatternReplacer};
 
 pub fn render_daily_pattern(
@@ -15,14 +17,18 @@ struct DailyPatternReplacer<'a> {
 }
 
 impl<'a> PatternReplacer for DailyPatternReplacer<'a> {
-    fn get_replacement_value(&self, key: &str, fmt: Option<&str>) -> Result<String, PatternError> {
+    fn get_replacement_value(
+        &self,
+        key: &str,
+        fmt: Option<&str>,
+    ) -> Result<Cow<'a, str>, PatternError> {
         match key {
             "DATE" => {
                 let fmt = fmt.unwrap_or("%Y-%m-%d");
                 let datestr = self.date.format(fmt).to_string();
-                Ok(datestr)
+                Ok(datestr.into())
             }
-            "SITE_ID" => Ok(self.site_id.to_string()),
+            "SITE_ID" => Ok(self.site_id.into()),
             _ => Err(PatternError::UnknownKey(key.to_string()).into()),
         }
     }

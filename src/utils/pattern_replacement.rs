@@ -1,9 +1,13 @@
+use std::borrow::Cow;
+
 use once_cell::sync::Lazy;
 use regex::Regex;
 
 pub use daily::render_daily_pattern;
+pub use gsetup::render_postproc_script_pattern;
 pub use met_ext_script::render_met_script_arg_pattern;
 mod daily;
+mod gsetup;
 mod met_ext_script;
 
 #[derive(Debug, thiserror::Error)]
@@ -13,7 +17,11 @@ pub enum PatternError {
 }
 
 pub(super) trait PatternReplacer {
-    fn get_replacement_value(&self, key: &str, fmt: Option<&str>) -> Result<String, PatternError>;
+    fn get_replacement_value(
+        &self,
+        key: &str,
+        fmt: Option<&str>,
+    ) -> Result<Cow<'_, str>, PatternError>;
 
     fn render_pattern(&self, pattern: &str) -> Result<String, PatternError> {
         static SUB_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{([^\}]+)\}").unwrap());
@@ -30,7 +38,7 @@ pub(super) trait PatternReplacer {
         Ok(rendered)
     }
 
-    fn do_pattern_replacement(&self, fmt_str: &str) -> Result<String, PatternError> {
+    fn do_pattern_replacement(&self, fmt_str: &str) -> Result<Cow<'_, str>, PatternError> {
         let mut split = fmt_str.splitn(2, ":");
         let key = split
             .next()
