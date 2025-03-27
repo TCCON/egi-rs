@@ -1,6 +1,6 @@
 use std::path::Path;
 
-pub mod daily;
+pub mod pattern_replacement;
 
 pub fn ensure_trailing_path_sep(p: &Path) -> Option<String> {
     let mut s = p.to_str()?.to_string();

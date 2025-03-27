@@ -210,8 +210,7 @@ fn load_met<P: AsRef<Path>>(igrams: &[P], met_source: MetSource) -> CatalogResul
         zpd_times.push(dt);
     }
 
-    let timezones = Timezones::check_consistent_timezones(zpd_times.into_iter());
-    let met = read_met_file(&met_source, timezones)
+    let met = read_met_file(&met_source, &zpd_times)
         .change_context_lazy(|| CatalogError::MetError)?;
 
     // For now, I'm using interpolators that don't care if the input is ordered. If they get slow, we can change this.
