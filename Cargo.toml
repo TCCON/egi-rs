@@ -28,6 +28,9 @@ thiserror = "1.0.48"
 [lib]
 
 [[bin]]
+name = "em27-init"
+
+[[bin]]
 name = "em27-catalogue"
 
 [[bin]]
