@@ -187,8 +187,48 @@ and you use Bash, then add the following to <code>~/.bashrc</code>:</li>
 <pre><code class="language-bash">export GGGPATH=/home/user/ggg
 export gggpath=/home/user/ggg
 </code></pre>
-<h2 id="installing-egi-v2"><a class="header" href="#installing-egi-v2">Installing EGI v2</a></h2>
-<p>TODO</p>
+<p>If your shell is ZSH, then the syntax is the same, but you would modify <code>~/.zshrc</code> instead.
+You can check which shell you have by running the command <code>echo $SHELL</code> in a terminal.</p>
+<h2 id="installing-ggg-rs"><a class="header" href="#installing-ggg-rs">Installing GGG-RS</a></h2>
+<p>EGI-RS uses some developmental replacements for the GGG post processing programs that have more flexibility to handle
+EM27/SUN-specific settings.
+Because this is part of a repo still under development, installation is a bit annoying at present.
+We will do our best to simplify this in the future.</p>
+<p>For now, the following steps will install these programs:</p>
+<ol>
+<li>Set the environmental variable <code>GGGRS_NCDIR</code> to point to the environment created as part of installing GGG.
+Depending on your GGG installation process, this might be at <code>$GGGPATH/install/.condaenv</code> or a named environment
+managed by conda. If you do not have a <code>$GGGPATH/install/.condaenv</code>, run <code>conda env list</code> and find the path for
+an environment named "ggg-tccon-default".
+See the <a href="installation.html#installing-ggg">Installing GGG</a> section above for how to set environmental variables.
+After modifying your <code>~/.bashrc</code> or <code>~/.zshrc</code> file, run <code>source ~/.bashrc</code> or <code>source ~/.zshrc</code> to include the
+new environmental variable in your shell.</li>
+<li>Change directory into your <code>$GGGPATH</code>, directory (<code>cd $GGGPATH</code>)</li>
+<li>Clone the GGG-RS repo as <code>src-rs</code> (<code>git clone https://github.com/TCCON/ggg-rs.git src-rs</code>)</li>
+<li>Change into the <code>src-rs</code> directory and run the <code>make</code> command.</li>
+</ol>
+<p>Compilation may take a few minutes.
+If all goes well, you should see a message similar to the following:</p>
+<pre><code>   Installed package `ggg-rs v0.1.0 (/home/you/ggg/src-rs)` (executables `add_nc_flags`, `apply_tccon_airmass_correction`, `bin2nc`, `change_ggg_files`, `collate_tccon_results`, `i2s_setup`, `list_spectra`, `plot_opus_spectra`, `query_output`, `strip_header`)
+warning: be sure to add `/home/you/ggg/bin` to your PATH to be able to run the installed binaries
+</code></pre>
+<p>You can ignore the warning about adding a directory to your PATH; we will always be calling these programs with their full path, so adding the directory to your PATH (which it so you only need to type the program name to run it).
+If you encounter trouble, see the <a href="https://github.com/TCCON/ggg-rs">GGG-RS README</a> for suggestions.
+To free up space, you can run the <code>cargo clean</code> command in <code>$GGGPATH/src-rs</code> to delete intermediate compilation files not needed any more.</p>
+<h2 id="installing-egi-rs"><a class="header" href="#installing-egi-rs">Installing EGI-RS</a></h2>
+<p>Once you have GGG-RS installed, installing EGI-RS is easy.
+Simply run the following command from anywhere:</p>
+<pre><code class="language-bash">cargo install --git https://github.com/TCCON/egi-rs --root "$GGGPATH"
+</code></pre>
+<p>Similarly to installing GGG-RS, you should see a message similar to:</p>
+<pre><code>   Installed package `egi-rs v0.1.0 (https://github.com/TCCON/egi-rs#2d7a442c)` (executables `em27-catalogue`, `em27-gfit-prep`, `em27-i2s-prep`, `em27-init`)
+warning: be sure to add `/home/you/ggg/bin` to your PATH to be able to run the installed binaries
+</code></pre>
+<p>Again, we can ignore that warning.
+The final step is to run the <code>em27-init</code> program we just installed.
+This will add some extra EM27/SUN-specific files to your <code>$GGGPATH</code>.
+It will print out a summary; all steps should read "OK".
+If not, or if you got a fatal error earlier in the run, correct the issue and try again.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="location"><a class="header" href="#location">Location</a></h1>
 <p>EGI v2 prefers JSON files to specify the latitude, longitude, and altitude at which the EM27 was positioned.
 Unlike version 1, which recommended using coordinate files stored in your <code>EGIPATH</code>, we recommend for version 2
