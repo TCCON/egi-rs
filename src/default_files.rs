@@ -1,4 +1,15 @@
+use crate::config::CoreConfig;
 pub use inner::*;
+
+pub fn default_core_config_toml() -> String {
+    let default_cfg = CoreConfig { 
+        ftp_email: "you@example.com".to_string(),
+        priors_request_email: "you@example.com".to_string(),
+    };
+    let s = toml::to_string_pretty(&default_cfg)
+        .expect("failed to serialize the default core configuration as TOML - this is a bug");
+    s
+}
 
 #[cfg(unix)]
 mod inner {

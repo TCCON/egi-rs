@@ -1,7 +1,8 @@
 use std::{
-    io::{BufRead, BufReader},
-    path::Path,
+    io::{BufRead, BufReader, Read, Write}, path::Path
 };
+
+use itertools::Itertools;
 
 pub mod pattern_replacement;
 
@@ -77,4 +78,101 @@ pub struct MenuEntry {
     pub index: usize,
     pub value: String,
     pub description: Option<String>,
+}
+
+
+pub fn add_menu_entry(file: &Path, value: &str, description: Option<&str>) -> std::io::Result<()> {
+    let mut current_contents = String::new();
+    {
+        let mut f = std::fs::File::open(file)?;
+        f.read_to_string(&mut current_contents)?;
+    }
+
+    // Try to figure out where the description should start - assume that the first line
+    // is the header and that it has description or similar as the second word
+    let desc_start_index = find_nth_word_index(&current_contents, 1);
+    let mut new_line = String::from(value);
+    if let Some(desc) = description {
+        if let Some(idesc) = desc_start_index {
+            // Add spaces up until we only need to add one more
+            while new_line.len() < idesc - 1 {
+                new_line.push(' ');
+            }
+            // Always add at least one space to separate the value and description
+            new_line.push(' ');
+            new_line.push_str(desc);
+        } else {
+            // We didn't find where the description column starts, so just put a
+            // space between the value and description.
+            new_line.push(' ');
+            new_line.push_str(desc);
+        }
+    }
+
+
+    // Since all OSes other than pre-OSX Mac use a line feed in their newline, check if the
+    // last character is a newline. If so, we can just append to the end of the current contents.
+    // Otherwise, check if the last line is all whitespace. If so, we can just replace that line,
+    // since the user must have just accidentally added a blank line. Otherwise, we actually need to
+    // add an entirely new line.
+    let mut lines = current_contents.split('\n').collect_vec();
+    let last_line = lines.last();
+    if let Some(last_line) = last_line {
+        if last_line.is_empty() || last_line.chars().all(|c| c.is_whitespace()) {
+            lines.pop();
+        }
+        lines.push(&new_line);
+    } else {
+        log::warn!("Adding entry to empty menu file, {}", file.display());
+    }
+    
+    let mut ext = file.extension()
+        .map(|ext| ext.to_string_lossy().to_string())
+        .unwrap_or_else(|| String::new());
+    ext.push_str(".bak");
+    let backup = file.with_extension(ext);
+    std::fs::rename(&file, &backup)?;
+    let mut f = std::fs::File::create(&file)?;
+    for line in lines {
+        writeln!(&mut f, "{line}")?;
+    }
+
+    Ok(())
+}
+
+fn find_nth_word_index(s: &str, n: usize) -> Option<usize> {
+    let mut iword = 0;
+    let mut last_char_was_space = true;
+    for (ichar, c) in s.char_indices() {
+        if c.is_whitespace() {
+            last_char_was_space = true;
+        } else if last_char_was_space && !c.is_whitespace() {
+            last_char_was_space = false;
+            iword += 1;
+        }
+
+        if iword == n + 1 {
+            return Some(ichar)
+        }
+    }
+
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::find_nth_word_index;
+
+    #[test]
+    fn test_nth_word_index() {
+        let s = " one two  three";
+        let i1 = find_nth_word_index(s, 0);
+        assert_eq!(i1, Some(1));
+        let i2 = find_nth_word_index(s, 1);
+        assert_eq!(i2, Some(5));
+        let i3 = find_nth_word_index(s, 2);
+        assert_eq!(i3, Some(10));
+        let i4 = find_nth_word_index(s, 3);
+        assert_eq!(i4, None);
+    }
 }

@@ -7,11 +7,11 @@
 //! Each step should be designed so that if this program is run multiple times,
 //! the step will only be done once (unless it somehow gets reverted in a way
 //! that the program can't detect).
-use std::{io::{Read, Write}, path::PathBuf, process::ExitCode};
+use std::{borrow::Cow, io::{Read, Write}, path::PathBuf, process::ExitCode};
 use clap::Parser;
 use clap_verbosity_flag::{Verbosity, WarnLevel};
 use ggg_rs::utils::{get_ggg_path, GggError};
-use egi_rs::default_files::{EM27_ADCFS, EM27_AICFS, EM27_WINDOWS};
+use egi_rs::{default_files::{default_core_config_toml, EM27_ADCFS, EM27_AICFS, EM27_WINDOWS}, utils};
 use inquire::{prompt_confirmation, InquireError};
 use itertools::Itertools;
 
@@ -49,9 +49,16 @@ fn driver(always_yes: bool) -> Result<bool, SetupError> {
     let ggg_path = get_ggg_path()?;
 
     let steps = [
+        MakeDirStep::new_boxed(ggg_path.join("egi"), false),
+        CreateFileStep::new_owned_boxed(default_core_config_toml(), ggg_path.join("egi").join("egi_config.toml")),
         CreateFileStep::new_boxed(EM27_WINDOWS, ggg_path.join("windows").join("gnd").join("em27.gnd")),
         CreateFileStep::new_boxed(EM27_ADCFS, ggg_path.join("tccon").join("corrections_airmass_postavg.em27.dat")),
         CreateFileStep::new_boxed(EM27_AICFS, ggg_path.join("tccon").join("corrections_insitu_postavg.em27.dat")),
+        AddMenuEntryStep::new_boxed(
+            ggg_path.join("windows").join("gnd").join("windows.men"), 
+            "em27.gnd",
+            Some("Subset of standard windows for an EM27 with an extended InGaAs detector")
+        )
     ];
 
     let mut n_skipped = 0;
@@ -119,7 +126,7 @@ trait SetupStep {
 
 /// Initialization step to create a file with fixed contents.
 struct CreateFileStep {
-    source: &'static str,
+    source: Cow<'static, str>,
     dest: PathBuf
 }
 
@@ -140,6 +147,13 @@ enum FileStatus {
 
 impl CreateFileStep {
     fn new_boxed(source: &'static str, dest: PathBuf) -> Box<dyn SetupStep> {
+        let source = Cow::Borrowed(source);
+        let me = Self { source, dest };
+        Box::new(me)
+    }
+
+    fn new_owned_boxed(source: String, dest: PathBuf) -> Box<dyn SetupStep> {
+        let source = Cow::Owned(source);
         let me = Self { source, dest };
         Box::new(me)
     }
@@ -221,6 +235,96 @@ impl SetupStep for CreateFileStep {
 
         let mut f = std::fs::File::create(&self.dest)?;
         f.write_all(self.source.as_bytes())?;
+        Ok(SetupOutcome::Executed)
+    }
+}
+
+
+struct MakeDirStep {
+    target_dir: PathBuf,
+    create_parents: bool
+}
+
+impl MakeDirStep {
+    fn new_boxed(target_dir: PathBuf, create_parents: bool) -> Box<dyn SetupStep> {
+        let me = Self { target_dir, create_parents };
+        Box::new(me)
+    }
+}
+
+impl SetupStep for MakeDirStep {
+    fn describe(&self) {
+        println!("Creating directory {}", self.target_dir.display());
+    }
+
+    fn tell_completion(&self) {
+        println!("Directory created.");
+    }
+
+    fn tell_not_needed(&self) {
+        println!("Directory already exists");
+    }
+
+    fn execute(&self, _always_yes: bool) -> SetupResult {
+        if self.target_dir.is_dir() {
+            return Ok(SetupOutcome::NotNeeded);
+        } else if self.target_dir.is_file() {
+            return Ok(SetupOutcome::OtherSkip("Target directory exists as a file, which is not expected".to_string()));
+        }
+
+        if !self.create_parents {
+            // check that the parent directory exists
+            let parent_exists = self.target_dir.parent().map(|p| p.exists())
+                .expect("Cannot get target directory parent; this is a bug.");
+            if !parent_exists {
+                return Ok(SetupOutcome::OtherSkip("Could not create directory; parent directory does not exist.".to_string()));
+            }
+
+            std::fs::create_dir(&self.target_dir)?;
+            Ok(SetupOutcome::Executed)
+        } else {
+            std::fs::create_dir_all(&self.target_dir)?;
+            Ok(SetupOutcome::Executed)
+        }
+    }
+}
+
+
+struct AddMenuEntryStep {
+    menu_file: PathBuf,
+    value: &'static str,
+    description: Option<&'static str>
+}
+
+impl AddMenuEntryStep {
+    fn new_boxed(menu_file: PathBuf, value: &'static str, description: Option<&'static str>) -> Box<dyn SetupStep> {
+        let me = Self { menu_file, value, description };
+        Box::new(me)
+    }
+}
+
+impl SetupStep for AddMenuEntryStep {
+    fn describe(&self) {
+        println!("Adding new entry '{}' to menu {}", self.value, self.menu_file.display());
+    }
+
+    fn tell_completion(&self) {
+        println!("Added entry.");
+    }
+
+    fn tell_not_needed(&self) {
+        println!("Did not add entry (already present).");
+    }
+
+    fn execute(&self, _always_yes: bool) -> SetupResult {
+        let current_entries = utils::read_menu_file(&self.menu_file)?;
+        for entry in current_entries {
+            if entry.value == self.value {
+                return Ok(SetupOutcome::NotNeeded);
+            }
+        }
+
+        utils::add_menu_entry(&self.menu_file, self.value, self.description)?;
         Ok(SetupOutcome::Executed)
     }
 }

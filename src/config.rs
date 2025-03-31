@@ -1,10 +1,22 @@
 use std::{fmt::Display, path::{Path, PathBuf}, str::FromStr};
 
 use clap::Args;
-use serde::{de, Deserialize};
+use serde::{de, Deserialize, Serialize};
 
 use ggg_rs::{i2s::{I2SHeaderEdit, I2SInputModifcations}, opus::{self, constants::bruker::BrukerParValue}};
 use crate::default_files;
+
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CoreConfig {
+    /// The email address used to access the Caltech FTP server
+    pub ftp_email: String,
+
+    /// The email address at which you want to receive messages
+    /// from the priors automation system. It does not need to
+    /// be the same as the FTP email.
+    pub priors_request_email: String,
+}
 
 
 #[derive(Debug, thiserror::Error)]
