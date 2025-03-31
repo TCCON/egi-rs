@@ -369,6 +369,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3c877555693c14d2f84191cfd3ad8582790fc52b5e2274b40b59cf5f5cea25c7"
 
 [[package]]
+name = "difflib"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6184e33543162437515c2e2b48714794e37845ec9851711914eec9d308f6ebe8"
+
+[[package]]
 name = "digest"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -392,6 +398,7 @@ dependencies = [
  "clap",
  "clap-verbosity-flag",
  "csv",
+ "difflib",
  "env_logger",
  "error-stack",
  "ggg-rs",
@@ -520,8 +527,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 [[package]]
 name = "fortformat"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8501b12c937998d534c02cb8cc822adcc32d797b49f6e557d5e5ffdc46209c6"
+source = "git+https://github.com/joshua-laughner/fortformat#725b2b7bfe23c410cdc571762912851badc44f1b"
 dependencies = [
  "error-stack",
  "itertools",

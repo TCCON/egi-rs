@@ -10,6 +10,7 @@ chrono = "0.4.31"
 clap = { version = "4.4.5", features = ["derive"] }
 clap-verbosity-flag = "2.0.1"
 csv = "1.3.0"
+difflib = "0.4.0"
 env_logger = "0.10.0"
 error-stack = "0.4.1"
 # EGI doesn't need the netCDF tools so we can disable the default feature to avoid building

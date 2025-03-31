@@ -11,7 +11,9 @@ use std::{io::{Read, Write}, path::PathBuf, process::ExitCode};
 use clap::Parser;
 use clap_verbosity_flag::{Verbosity, WarnLevel};
 use ggg_rs::utils::{get_ggg_path, GggError};
-use egi_rs::default_files::EM27_WINDOWS;
+use egi_rs::default_files::{EM27_ADCFS, EM27_AICFS, EM27_WINDOWS};
+use inquire::{prompt_confirmation, InquireError};
+use itertools::Itertools;
 
 
 fn main() -> ExitCode {
@@ -22,11 +24,13 @@ fn main() -> ExitCode {
     .init();
 
     let res = driver(clargs.yes);
-    if let Err(e) = res {
-        eprintln!("Error initializing EGI:\n{e}");
-        ExitCode::FAILURE
-    } else {
-        ExitCode::SUCCESS
+    match res {
+        Ok(true) => ExitCode::SUCCESS,
+        Ok(false) => ExitCode::from(2),
+        Err(e) => {
+            eprintln!("Error initializing EGI:\n{e}");
+            ExitCode::FAILURE
+        }
     }
 }
 
@@ -41,24 +45,39 @@ struct Cli {
     yes: bool,
 }
 
-fn driver(always_yes: bool) -> Result<(), SetupError> {
+fn driver(always_yes: bool) -> Result<bool, SetupError> {
     let ggg_path = get_ggg_path()?;
 
     let steps = [
-        CreateFileStep::new_boxed(EM27_WINDOWS, ggg_path.join("windows").join("gnd").join("em27.gnd"))
+        CreateFileStep::new_boxed(EM27_WINDOWS, ggg_path.join("windows").join("gnd").join("em27.gnd")),
+        CreateFileStep::new_boxed(EM27_ADCFS, ggg_path.join("tccon").join("corrections_airmass_postavg.em27.dat")),
+        CreateFileStep::new_boxed(EM27_AICFS, ggg_path.join("tccon").join("corrections_insitu_postavg.em27.dat")),
     ];
 
+    let mut n_skipped = 0;
     for step in steps {
         step.describe();
         let outcome = step.execute(always_yes)?;
         match outcome {
             SetupOutcome::Executed => step.tell_completion(),
             SetupOutcome::NotNeeded => step.tell_not_needed(),
-            SetupOutcome::UserSkipped => println!("Skipped as requested"),
+            SetupOutcome::UserSkipped => {
+                println!("Skipped as requested");
+                n_skipped += 1;
+            },
+            SetupOutcome::OtherSkip(reason) => {
+                println!("Step skipped: {reason}");
+                n_skipped += 1;
+            }
         }
     }
 
-    Ok(())
+    if n_skipped == 0 {
+        Ok(true)
+    } else {
+        println!("{n_skipped} steps were skipped, your EGI integration may be incomplete. Review the steps skipped and rerun this program if needed.");
+        Ok(false)
+    }
 }
 
 type SetupResult = Result<SetupOutcome, SetupError>;
@@ -75,6 +94,8 @@ enum SetupOutcome {
     /// user cancelled it at some point.
     UserSkipped,
 
+    /// The step was skipped for another reason
+    OtherSkip(String),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -85,6 +106,8 @@ enum SetupError {
     IoError(#[from] std::io::Error),
     #[error(transparent)]
     GggError(#[from] GggError),
+    #[error("{0}")]
+    Other(String),
 }
 
 trait SetupStep {
@@ -139,16 +162,35 @@ impl CreateFileStep {
     /// Ask the user whether to overwrite an existing file with different
     /// content than expected. Returns `Some(true)` if they answer "yes",
     /// `Some(false)` if "no", and `None` if they want to abort initialization.
-    fn ask_to_overwrite(&self, current_content: &str, always_yes: bool) -> Option<bool> {
-        // Should show the diff (with https://docs.rs/difflib/latest/difflib/ or similar)
+    fn ask_to_overwrite(&self, current_content: &str, always_yes: bool) -> Result<bool, InquireError> {
+        if always_yes {
+            return Ok(true);
+        }
+
+        // Show the diff (with https://docs.rs/difflib/latest/difflib/ or similar)
         // then ask if it is okay to overwrite.
-        todo!()
+        let current_lines = current_content.split('\n').collect_vec();
+        let wanted_lines = self.source.split('\n').collect_vec();
+        let diff = difflib::unified_diff(
+            &current_lines,
+            &wanted_lines,
+            &format!("On disk ({})", self.dest.display()),
+            "To write",
+            "",
+            "",
+            3);
+        
+        for line in diff {
+            println!("{line}");
+        }
+
+        prompt_confirmation("Okay to overwrite?")
     }
 }
 
 impl SetupStep for CreateFileStep {
     fn describe(&self) {
-        println!("Creating EM27 window file...");
+        println!("Creating file {}", self.dest.display());
     }
 
     fn tell_completion(&self) {
@@ -164,9 +206,14 @@ impl SetupStep for CreateFileStep {
             FileStatus::Extant => return Ok(SetupOutcome::NotNeeded),
             FileStatus::ContentDiffers(curr_content) => {
                 match self.ask_to_overwrite(&curr_content, always_yes) {
-                    Some(true) => (),
-                    Some(false) => return Ok(SetupOutcome::UserSkipped),
-                    None => return Err(SetupError::UserAbort)
+                    Ok(true) => (),
+                    Ok(false) => return Ok(SetupOutcome::UserSkipped),
+                    Err(InquireError::OperationCanceled) => return Err(SetupError::UserAbort),
+                    Err(InquireError::OperationInterrupted) => panic!("Ctrl+C received, aborting"),
+                    Err(InquireError::IO(e)) => return Err(SetupError::IoError(e)),
+                    Err(InquireError::NotTTY) => return Ok(SetupOutcome::OtherSkip("input required but program is not running interactively".to_string())),
+                    Err(InquireError::InvalidConfiguration(e)) => return Err(SetupError::Other(e)),
+                    Err(InquireError::Custom(e)) => return Err(SetupError::Other(e.to_string())),
                 }
             },
             FileStatus::Missing => (),
