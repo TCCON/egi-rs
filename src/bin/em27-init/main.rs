@@ -10,6 +10,7 @@
 use std::{borrow::Cow, io::{Read, Write}, path::PathBuf, process::ExitCode};
 use clap::Parser;
 use clap_verbosity_flag::{Verbosity, WarnLevel};
+use colored::Colorize;
 use ggg_rs::utils::{get_ggg_path, GggError};
 use egi_rs::{default_files::{default_core_config_toml, EM27_ADCFS, EM27_AICFS, EM27_WINDOWS}, utils};
 use inquire::{prompt_confirmation, InquireError};
@@ -62,27 +63,47 @@ fn driver(always_yes: bool) -> Result<bool, SetupError> {
     ];
 
     let mut n_skipped = 0;
+    let mut outcomes = vec![];
     for step in steps {
         step.describe();
         let outcome = step.execute(always_yes)?;
         match outcome {
-            SetupOutcome::Executed => step.tell_completion(),
-            SetupOutcome::NotNeeded => step.tell_not_needed(),
+            SetupOutcome::Executed => {
+                step.tell_completion();
+                outcomes.push((true, step.name()));
+            },
+            SetupOutcome::NotNeeded => {
+                step.tell_not_needed();
+                outcomes.push((true, step.name()));
+            },
             SetupOutcome::UserSkipped => {
                 println!("Skipped as requested");
                 n_skipped += 1;
+                outcomes.push((false, step.name()));
             },
             SetupOutcome::OtherSkip(reason) => {
                 println!("Step skipped: {reason}");
                 n_skipped += 1;
+                outcomes.push((false, step.name()));
             }
         }
     }
 
+    println!("\nSummary:");
+    for (step_ok, step_name) in outcomes {
+        let status_text = if step_ok {
+            "OK".on_green().black().bold()
+        } else {
+            "SKIPPED".on_red().black().bold()
+        };
+        println!("{status_text:^8} {step_name}");
+    }
+
     if n_skipped == 0 {
+        println!("\nEGI initialization complete.");
         Ok(true)
     } else {
-        println!("{n_skipped} steps were skipped, your EGI integration may be incomplete. Review the steps skipped and rerun this program if needed.");
+        println!("\n{n_skipped} steps were skipped, your EGI integration may be incomplete. Review the steps skipped and rerun this program if needed.");
         Ok(false)
     }
 }
@@ -118,6 +139,7 @@ enum SetupError {
 }
 
 trait SetupStep {
+    fn name(&self) -> Cow<'static, str>;
     fn describe(&self);
     fn tell_completion(&self);
     fn tell_not_needed(&self);
@@ -203,6 +225,13 @@ impl CreateFileStep {
 }
 
 impl SetupStep for CreateFileStep {
+    fn name(&self) -> Cow<'static, str> {
+        let name = self.dest.file_name()
+            .map(|n| n.to_string_lossy())
+            .unwrap_or_else(|| self.dest.to_string_lossy());
+        format!("Create '{name}' file").into()
+    }
+
     fn describe(&self) {
         println!("Creating file {}", self.dest.display());
     }
@@ -253,6 +282,21 @@ impl MakeDirStep {
 }
 
 impl SetupStep for MakeDirStep {
+    fn name(&self) -> Cow<'static, str> {
+        // Abbreviate the path if it is inside GGGPATH
+        let dir_name = if let Ok(ggg_path) = get_ggg_path() {
+            if let Ok(subdir) = self.target_dir.strip_prefix(&ggg_path) {
+                format!("$GGGPATH/{}", subdir.display())
+            } else {
+                format!("{}", self.target_dir.display())
+            }
+        } else {
+            format!("{}", self.target_dir.display())
+        };
+        
+        format!("Make directory {dir_name}").into()
+    }
+
     fn describe(&self) {
         println!("Creating directory {}", self.target_dir.display());
     }
@@ -304,6 +348,13 @@ impl AddMenuEntryStep {
 }
 
 impl SetupStep for AddMenuEntryStep {
+    fn name(&self) -> Cow<'static, str> {
+        let file_name = self.menu_file.file_name()
+            .map(|name| name.to_string_lossy())
+            .unwrap_or_else(|| self.menu_file.to_string_lossy());
+        format!("Add {} entry to {}", self.value, file_name).into()
+    }
+
     fn describe(&self) {
         println!("Adding new entry '{}' to menu {}", self.value, self.menu_file.display());
     }
