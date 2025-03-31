@@ -16,6 +16,7 @@ use egi_rs::{default_files::{default_core_config_toml, EM27_ADCFS, EM27_AICFS, E
 use inquire::{prompt_confirmation, InquireError};
 use itertools::Itertools;
 
+static INSTALL_GGG_RS: &'static str = "Ensure that you have installed the latest GGG-RS (https://github.com/TCCON/ggg-rs)";
 
 fn main() -> ExitCode {
     let clargs = Cli::parse();
@@ -29,7 +30,7 @@ fn main() -> ExitCode {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::from(2),
         Err(e) => {
-            eprintln!("Error initializing EGI:\n{e}");
+            eprintln!("Error initializing EGI:\n{e}\nCorrect the underlying cause and rerun this program to complete initialization.");
             ExitCode::FAILURE
         }
     }
@@ -60,48 +61,51 @@ fn driver(always_yes: bool) -> Result<bool, SetupError> {
             "em27.gnd",
             Some("Subset of standard windows for an EM27 with an extended InGaAs detector")
         ),
-        CheckExtraProgramStep::new_boxed("collate_tccon_results", PgrmLoc::GGGPATH),
-        CheckExtraProgramStep::new_boxed("apply_tccon_airmass_correction", PgrmLoc::GGGPATH),
-        CheckExtraProgramStep::new_boxed("apply_tccon_insitu_correction", PgrmLoc::GGGPATH),
-        CheckExtraProgramStep::new_boxed("add_nc_flags", PgrmLoc::GGGPATH),
+        CheckExtraProgramStep::new_boxed("collate_tccon_results", PgrmLoc::GGGPATH, Some(INSTALL_GGG_RS)),
+        CheckExtraProgramStep::new_boxed("apply_tccon_airmass_correction", PgrmLoc::GGGPATH, Some(INSTALL_GGG_RS)),
+        CheckExtraProgramStep::new_boxed("apply_tccon_insitu_correction", PgrmLoc::GGGPATH, Some(INSTALL_GGG_RS)),
+        CheckExtraProgramStep::new_boxed("add_nc_flags", PgrmLoc::GGGPATH, Some(INSTALL_GGG_RS)),
     ];
 
     let mut n_skipped = 0;
     let mut n_failed = 0;
     let mut outcomes = vec![];
-    for step in steps {
+    for step in steps.iter() {
         step.describe();
         let outcome = step.execute(always_yes)?;
         match outcome {
             SetupOutcome::Executed => {
                 step.tell_completion();
-                outcomes.push((SetupDisplayOutcome::Ok, step.name()));
+                outcomes.push((SetupDisplayOutcome::Ok, step.name(), None));
             },
             SetupOutcome::NotNeeded => {
                 step.tell_not_needed();
-                outcomes.push((SetupDisplayOutcome::Ok, step.name()));
+                outcomes.push((SetupDisplayOutcome::Ok, step.name(), None));
             },
             SetupOutcome::UserSkipped => {
                 println!("Skipped as requested");
                 n_skipped += 1;
-                outcomes.push((SetupDisplayOutcome::Skipped, step.name()));
+                outcomes.push((SetupDisplayOutcome::Skipped, step.name(), None));
             },
             SetupOutcome::OtherSkip(reason) => {
                 println!("Step skipped: {reason}");
                 n_skipped += 1;
-                outcomes.push((SetupDisplayOutcome::Skipped, step.name()));
+                outcomes.push((SetupDisplayOutcome::Skipped, step.name(), None));
             },
             SetupOutcome::Failed => {
                 println!("Step failed");
                 n_failed += 1;
-                outcomes.push((SetupDisplayOutcome::Failed, step.name()));
+                outcomes.push((SetupDisplayOutcome::Failed, step.name(), step.suggested_action()));
             }
         }
     }
 
     println!("\nSummary:");
-    for (step_outcome, step_name) in outcomes {
+    for (step_outcome, step_name, action) in outcomes {
         println!("{:^8} {step_name}", step_outcome.col_str());
+        if let Some(action) = action {
+            println!("{:8} ↪ {action}", " ");
+        }
     }
 
     if n_skipped == 0 && n_failed == 0{
@@ -172,6 +176,9 @@ trait SetupStep {
     fn tell_completion(&self);
     fn tell_not_needed(&self);
     fn execute(&self, always_yes: bool) -> SetupResult;
+    fn suggested_action(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Initialization step to create a file.
@@ -426,12 +433,14 @@ enum PgrmLoc {
 /// a base GGG install) are available.
 struct CheckExtraProgramStep {
     program: &'static str,
-    location: PgrmLoc
+    location: PgrmLoc,
+    correction: Option<Cow<'static, str>>
 }
 
 impl CheckExtraProgramStep {
-    fn new_boxed(program: &'static str, prgm_loc: PgrmLoc) -> Box<dyn SetupStep> {
-        let me = Self{ program, location: prgm_loc };
+    fn new_boxed(program: &'static str, prgm_loc: PgrmLoc, correction: Option<&'static str>) -> Box<dyn SetupStep> {
+        let correction = correction.map(|c| Cow::Borrowed(c));
+        let me = Self{ program, location: prgm_loc, correction };
         Box::new(me)
     }
 }
@@ -454,6 +463,10 @@ impl SetupStep for CheckExtraProgramStep {
 
     fn tell_not_needed(&self) {
         println!("Did not check for {}", self.program);
+    }
+
+    fn suggested_action(&self) -> Option<&str> {
+        self.correction.as_deref()
     }
 
     fn execute(&self, _always_yes: bool) -> SetupResult {
