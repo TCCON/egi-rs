@@ -10,7 +10,7 @@
 use std::{borrow::Cow, io::{Read, Write}, path::PathBuf, process::ExitCode};
 use clap::Parser;
 use clap_verbosity_flag::{Verbosity, WarnLevel};
-use colored::Colorize;
+use colored::{ColoredString, Colorize};
 use ggg_rs::utils::{get_ggg_path, GggError};
 use egi_rs::{default_files::{default_core_config_toml, EM27_ADCFS, EM27_AICFS, EM27_WINDOWS}, utils};
 use inquire::{prompt_confirmation, InquireError};
@@ -59,10 +59,15 @@ fn driver(always_yes: bool) -> Result<bool, SetupError> {
             ggg_path.join("windows").join("gnd").join("windows.men"), 
             "em27.gnd",
             Some("Subset of standard windows for an EM27 with an extended InGaAs detector")
-        )
+        ),
+        CheckExtraProgramStep::new_boxed("collate_tccon_results", PgrmLoc::GGGPATH),
+        CheckExtraProgramStep::new_boxed("apply_tccon_airmass_correction", PgrmLoc::GGGPATH),
+        CheckExtraProgramStep::new_boxed("apply_tccon_insitu_correction", PgrmLoc::GGGPATH),
+        CheckExtraProgramStep::new_boxed("add_nc_flags", PgrmLoc::GGGPATH),
     ];
 
     let mut n_skipped = 0;
+    let mut n_failed = 0;
     let mut outcomes = vec![];
     for step in steps {
         step.describe();
@@ -70,40 +75,43 @@ fn driver(always_yes: bool) -> Result<bool, SetupError> {
         match outcome {
             SetupOutcome::Executed => {
                 step.tell_completion();
-                outcomes.push((true, step.name()));
+                outcomes.push((SetupDisplayOutcome::Ok, step.name()));
             },
             SetupOutcome::NotNeeded => {
                 step.tell_not_needed();
-                outcomes.push((true, step.name()));
+                outcomes.push((SetupDisplayOutcome::Ok, step.name()));
             },
             SetupOutcome::UserSkipped => {
                 println!("Skipped as requested");
                 n_skipped += 1;
-                outcomes.push((false, step.name()));
+                outcomes.push((SetupDisplayOutcome::Skipped, step.name()));
             },
             SetupOutcome::OtherSkip(reason) => {
                 println!("Step skipped: {reason}");
                 n_skipped += 1;
-                outcomes.push((false, step.name()));
+                outcomes.push((SetupDisplayOutcome::Skipped, step.name()));
+            },
+            SetupOutcome::Failed => {
+                println!("Step failed");
+                n_failed += 1;
+                outcomes.push((SetupDisplayOutcome::Failed, step.name()));
             }
         }
     }
 
     println!("\nSummary:");
-    for (step_ok, step_name) in outcomes {
-        let status_text = if step_ok {
-            "OK".on_green().black().bold()
-        } else {
-            "SKIPPED".on_red().black().bold()
-        };
-        println!("{status_text:^8} {step_name}");
+    for (step_outcome, step_name) in outcomes {
+        println!("{:^8} {step_name}", step_outcome.col_str());
     }
 
-    if n_skipped == 0 {
+    if n_skipped == 0 && n_failed == 0{
         println!("\nEGI initialization complete.");
         Ok(true)
     } else {
-        println!("\n{n_skipped} steps were skipped, your EGI integration may be incomplete. Review the steps skipped and rerun this program if needed.");
+        print!("\n");
+        if n_skipped > 0 { print!("{n_skipped} steps were skipped, "); }
+        if n_failed > 0 { print!("{n_failed} steps/checks failed, "); }
+        println!("your EGI integration may be incomplete. Review the steps skipped/failed and rerun this program if needed.");
         Ok(false)
     }
 }
@@ -118,12 +126,32 @@ enum SetupOutcome {
     /// been completed previously.
     NotNeeded,
 
+    /// Indicates that the step failed in a way that does not
+    /// indicate an error with EGI-RS.
+    Failed,
+
     /// Indicates that the step did not complete because the
     /// user cancelled it at some point.
     UserSkipped,
 
     /// The step was skipped for another reason
     OtherSkip(String),
+}
+
+enum SetupDisplayOutcome {
+    Ok,
+    Skipped,
+    Failed,
+}
+
+impl SetupDisplayOutcome {
+    fn col_str(&self) -> ColoredString {
+        match self {
+            SetupDisplayOutcome::Ok => "OK".on_green().black().bold(),
+            SetupDisplayOutcome::Skipped => "SKIPPED".on_yellow().black().bold(),
+            SetupDisplayOutcome::Failed => "FAILED".on_red().bold(),
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -146,7 +174,10 @@ trait SetupStep {
     fn execute(&self, always_yes: bool) -> SetupResult;
 }
 
-/// Initialization step to create a file with fixed contents.
+/// Initialization step to create a file.
+/// Use `new_boxed` to create a file with predetermined contents and
+/// `new_owned_box` if the contents need to be constructed as a dynamic
+/// `String`.
 struct CreateFileStep {
     source: Cow<'static, str>,
     dest: PathBuf
@@ -269,6 +300,7 @@ impl SetupStep for CreateFileStep {
 }
 
 
+/// Initialization step to create a new directory.
 struct MakeDirStep {
     target_dir: PathBuf,
     create_parents: bool
@@ -333,7 +365,7 @@ impl SetupStep for MakeDirStep {
     }
 }
 
-
+/// Initialization step to add an entry to a GGG `.men` (i.e., menu) file.
 struct AddMenuEntryStep {
     menu_file: PathBuf,
     value: &'static str,
@@ -377,5 +409,68 @@ impl SetupStep for AddMenuEntryStep {
 
         utils::add_menu_entry(&self.menu_file, self.value, self.description)?;
         Ok(SetupOutcome::Executed)
+    }
+}
+
+/// Used to indicate where to look for extra programs
+#[derive(Debug, Clone, Copy)]
+enum PgrmLoc {
+    /// Program expected to exist under $GGGPATH/bin.
+    GGGPATH,
+    /// Program expected to exist on the user's shell's PATH.
+    #[allow(unused)]
+    PATH,
+}
+
+/// Initialization step to check that extra programs (not included in
+/// a base GGG install) are available.
+struct CheckExtraProgramStep {
+    program: &'static str,
+    location: PgrmLoc
+}
+
+impl CheckExtraProgramStep {
+    fn new_boxed(program: &'static str, prgm_loc: PgrmLoc) -> Box<dyn SetupStep> {
+        let me = Self{ program, location: prgm_loc };
+        Box::new(me)
+    }
+}
+
+impl SetupStep for CheckExtraProgramStep {
+    fn name(&self) -> Cow<'static, str> {
+        format!("Find program '{}'", self.program).into()
+    }
+
+    fn describe(&self) {
+        match self.location {
+            PgrmLoc::GGGPATH => println!("Checking that program {} is available in $GGGPATH/bin", self.program),
+            PgrmLoc::PATH => println!("Checking that {} is available on PATH", self.program),
+        }
+    }
+
+    fn tell_completion(&self) {
+        println!("Found {}", self.program);
+    }
+
+    fn tell_not_needed(&self) {
+        println!("Did not check for {}", self.program);
+    }
+
+    fn execute(&self, _always_yes: bool) -> SetupResult {
+        let found = match self.location {
+            PgrmLoc::GGGPATH => {
+                let ggg_path = get_ggg_path()?;
+                ggg_path.join("bin").join(self.program).is_file()
+            },
+            PgrmLoc::PATH => {
+                which::which(self.program).is_ok()
+            },
+        };
+
+        if found {
+            Ok(SetupOutcome::Executed)
+        } else {
+            Ok(SetupOutcome::Failed)
+        }
     }
 }
