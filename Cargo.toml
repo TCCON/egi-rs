@@ -16,7 +16,8 @@ env_logger = "0.10.0"
 error-stack = "0.4.1"
 # EGI doesn't need the netCDF tools so we can disable the default feature to avoid building
 # the netCDF crate
-ggg-rs = {path = "../src-rs", default-features = false}
+# ggg-rs = {path = "../src-rs", default-features = false}
+ggg-rs = {git = "https://github.com/TCCON/ggg-rs.git", default-features = false}
 glob = "0.3.1"
 inquire = "0.7.5"
 itertools = "0.11.0"

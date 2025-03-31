@@ -609,6 +609,7 @@ dependencies = [
 [[package]]
 name = "ggg-rs"
 version = "0.1.0"
+source = "git+https://github.com/TCCON/ggg-rs.git#b7b165ef42cc02b9e077f14be4f3377fdc5dfb54"
 dependencies = [
  "approx 0.5.1",
  "chrono",

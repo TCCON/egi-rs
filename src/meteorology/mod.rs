@@ -1,5 +1,4 @@
 use std::{
-    char::CharTryFromError,
     fmt::Display,
     path::{Path, PathBuf},
 };

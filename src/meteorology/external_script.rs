@@ -1,6 +1,5 @@
 use std::{
-    ffi::OsStr,
-    path::{Path, PathBuf},
+    path::Path,
     process::Command,
 };
 
@@ -129,6 +128,7 @@ pub(super) fn read_met_with_script<S: AsRef<str>>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     #[test]
     fn test_ext_met_script() {

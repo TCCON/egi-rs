@@ -7,7 +7,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 use ggg_rs::{i2s::{self, OpusCatalogueEntry}, interpolation::{ConstantValueInterp, InterpolationError, InterpolationMethod}, opus::{self, constants::bruker::BrukerBlockType, IgramHeader, MissingOpusParameterError}};
-use crate::{coordinates::CoordinateSource, meteorology::{read_met_file, MetEntry, MetSource, Timezones}, CATALOG_FILL_FLOAT_F32};
+use crate::{coordinates::CoordinateSource, meteorology::{read_met_file, MetEntry, MetSource}, CATALOG_FILL_FLOAT_F32};
 
 type CatalogResult<T> = error_stack::Result<T, CatalogError>;
 
