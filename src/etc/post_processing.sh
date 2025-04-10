@@ -2,8 +2,8 @@
 {GGGPATH}/bin/collate_tccon_results v
 {GGGPATH}/bin/average_results {RUNLOG}.tsw
 {GGGPATH}/bin/average_results {RUNLOG}.vsw
-{GGGPATH}/bin/apply_airmass_correction {RUNLOG}.vav
-{GGGPATH}/bin/apply_insitu_correction {RUNLOG}.vav.ada
+{GGGPATH}/bin/apply_tccon_airmass_correction {GGGPATH}/tccon/corrections_airmass_postavg.em27.dat {RUNLOG}.vav
+{GGGPATH}/bin/apply_tccon_insitu_correction {GGGPATH}/tccon/corrections_insitu_postavg.em27.dat {RUNLOG}.vav.ada
 {GGGPATH}/bin/error_scale_factor {RUNLOG}.vav.ada.aia
 {GGGPATH}/bin/extract_pth {RUNLOG}.grl y
 {GGGPATH}/bin/write_official_output_file {RUNLOG}.vav.ada.aia

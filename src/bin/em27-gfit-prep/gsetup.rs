@@ -19,8 +19,12 @@ pub(super) fn run_gsetup(
     // not available yet.
 
     if !run_dir.exists() {
-        std::fs::create_dir(run_dir)
-        .change_context_lazy(|| CliError::other(format!("Could not create run directory, {} (does the parent directory exist?)", run_dir.display())))?;
+        std::fs::create_dir(run_dir).change_context_lazy(|| {
+            CliError::other(format!(
+                "Could not create run directory, {} (does the parent directory exist?)",
+                run_dir.display()
+            ))
+        })?;
     }
 
     // Other than the priors check, this basically wraps gsetup to ensure that the
@@ -129,7 +133,7 @@ pub(super) fn run_gsetup(
         })
         .expect("Failed to get the runlog with our previously found index");
 
-    let (i, _) = runlog_name.char_indices().nth(2)
+    let (i, _) = runlog_name.char_indices().nth(1)
         .ok_or_else(|| CliError::bad_input(format!("Runlog name ({runlog_name}) too short; it did not have at least the two character site ID at the start")))?;
     let site_id = &runlog_name[..i + 1];
 

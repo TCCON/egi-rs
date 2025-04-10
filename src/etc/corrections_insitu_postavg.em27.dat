@@ -10,10 +10,10 @@ day variability. This vastly overestimates the uncertainty in the average
 value, however the standard error underestimates the uncertainty.
 The latter (AICF) is determined offline by comparisons with in situ profiles.
 AICF_Err (uncertainties) are 1-sigma standard deviations from the best fit.
- Gas     AICF  AICF_Err
-"xco2"   1.0076  0.0004
-"xch4"   0.9999  0.0004
-"xn2o"   0.9638  0.0100
-"xco"    1.0000  0.0030
-"xh2o"   1.0183  0.0100
-"xluft"  1.0000  0.0001
+ Gas     AICF  AICF_Err  WMO_Scale
+"xco2"   1.0076  0.0004  "WMO CO2 X2007"
+"xch4"   0.9999  0.0004  "WMO CH4 X2004"
+"xn2o"   0.9638  0.0100  "NOAA 2006A"
+"xco"    1.0000  0.0030  "N/A"
+"xh2o"   1.0183  0.0100  "UNKNOWN"
+"xluft"  1.0000  0.0001  "UNKNOWN"
