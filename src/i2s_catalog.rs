@@ -3,11 +3,12 @@ use std::{collections::HashSet, fmt::Display, path::{Path, PathBuf}};
 use chrono::{NaiveDate, NaiveTime, DateTime, FixedOffset, TimeZone, Datelike};
 use error_stack::ResultExt;
 use itertools::Itertools;
+use log::trace;
 use once_cell::sync::Lazy;
 use regex::Regex;
 
 use ggg_rs::{i2s::{self, OpusCatalogueEntry}, interpolation::{ConstantValueInterp, InterpolationError, InterpolationMethod}, opus::{self, constants::bruker::BrukerBlockType, IgramHeader, MissingOpusParameterError}};
-use crate::{coordinates::CoordinateSource, meteorology::{read_met_file, MetEntry, MetSource}, CATALOG_FILL_FLOAT_F32};
+use crate::{coordinates::CoordinateSource, meteorology::{read_met_file, MetEntry, MetSource}, CATALOG_FILL_FLOAT_F32, CATALOG_FILL_FLOAT_F64};
 
 type CatalogResult<T> = error_stack::Result<T, CatalogError>;
 
@@ -151,16 +152,17 @@ fn create_catalog_entry_for_igram(igram: &Path, run: u32, coords: &CoordinateSou
     let met_times = met.iter()
         .map(|m| m.datetime)
         .collect_vec();
+    trace!("met_times[..10] = {:?}", &met_times[..10]);
 
     let met_pres = met.iter()
-        .map(|m| m.pressure as f32)
+        .map(|m| m.pressure)
         .collect_vec();
     let met_pres_res = interpolator.interp1d_to_time(met_times.as_slice(), met_pres.as_slice(), zpd_time);
     let met_pres = match met_pres_res {
         Ok(v) => v,
         Err(InterpolationError::OutOfDomain { left: _, right: _, out: _ }) => {
             if keep_if_missing_met {
-                CATALOG_FILL_FLOAT_F32
+                CATALOG_FILL_FLOAT_F64
             } else {
                 return Err(CatalogError::SkippingIgram(igram.to_path_buf(), IgramSkipReason::MetUnavailable).into())
             }
@@ -170,18 +172,21 @@ fn create_catalog_entry_for_igram(igram: &Path, run: u32, coords: &CoordinateSou
                 .attach_printable_lazy(|| e);
         }
     };
+    trace!("Interpolated pressure to ZPD time {zpd_time}: {met_pres}");
 
     let met_temp = met.iter()
-        .map(|m| m.temperature.map(|t| t as f32).unwrap_or(CATALOG_FILL_FLOAT_F32))
+        .map(|m| m.temperature.unwrap_or(CATALOG_FILL_FLOAT_F64))
         .collect_vec();
     let met_temp = interpolator.interp1d_to_time(met_times.as_slice(), met_temp.as_slice(), zpd_time)
-        .unwrap_or(CATALOG_FILL_FLOAT_F32);
+        .unwrap_or(CATALOG_FILL_FLOAT_F64);
+    trace!("Interpolated temperature to ZPD time {zpd_time}: {met_temp}");
 
     let met_rh = met.iter()
-        .map(|m| m.humidity.map(|rh| rh as f32).unwrap_or(CATALOG_FILL_FLOAT_F32))
+        .map(|m| m.humidity.unwrap_or(CATALOG_FILL_FLOAT_F64))
         .collect_vec();
     let met_rh = interpolator.interp1d_to_time(met_times.as_slice(), met_rh.as_slice(), zpd_time)
-        .unwrap_or(CATALOG_FILL_FLOAT_F32);
+        .unwrap_or(CATALOG_FILL_FLOAT_F64);
+    trace!("Interpolated RH to ZPD time {zpd_time}: {met_rh}");
 
     // Finalize just checks that the required year, month, day, run were present, so that shouldn't error.
     // The other setters might though.
@@ -190,9 +195,9 @@ fn create_catalog_entry_for_igram(igram: &Path, run: u32, coords: &CoordinateSou
         .change_context_lazy(|| CatalogError::EntryCreationError(igram.to_path_buf()))?
         .with_coordinates(lat, lon, alt)
         .change_context_lazy(|| CatalogError::EntryCreationError(igram.to_path_buf()))?
-        .with_instrument(tins as f32, met_pres, met_rh)
+        .with_instrument(tins, met_pres, met_rh)
         .with_outside_met(met_temp, met_pres, met_rh)
-        .finalize(CATALOG_FILL_FLOAT_F32)
+        .finalize(CATALOG_FILL_FLOAT_F64)
         .change_context_lazy(|| CatalogError::EntryCreationError(igram.to_path_buf()))?;
 
     Ok(entry)

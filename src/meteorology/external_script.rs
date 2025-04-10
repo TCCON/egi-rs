@@ -1,10 +1,7 @@
-use std::{
-    path::Path,
-    process::Command,
-};
+use std::{path::Path, process::Command};
 
 use itertools::Itertools;
-use log::info;
+use log::{info, trace};
 
 use super::MetEntry;
 use crate::utils::pattern_replacement::{render_met_script_arg_pattern, PatternError};
@@ -118,6 +115,10 @@ pub(super) fn read_met_with_script<S: AsRef<str>>(
             ientry += 1;
             let entry: MetEntry = serde_json::from_slice(&line)
                 .map_err(|e| ScriptMetError::entry_parse_error(ientry, e, line))?;
+            trace!(
+                "Deserialized line ({}) from met script as {entry:?}",
+                String::from_utf8_lossy(&line)
+            );
             met_entries.push(entry);
         }
     }
