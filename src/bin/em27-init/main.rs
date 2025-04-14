@@ -11,7 +11,9 @@ use clap::Parser;
 use clap_verbosity_flag::{Verbosity, WarnLevel};
 use colored::{ColoredString, Colorize};
 use egi_rs::{
-    default_files::{default_core_config_toml, EM27_ADCFS, EM27_AICFS, EM27_QC, EM27_WINDOWS},
+    default_files::{
+        default_core_config_toml, EM27_ADCFS, EM27_AICFS, EM27_EXTRA_FILTERS, EM27_QC, EM27_WINDOWS,
+    },
     utils,
 };
 use ggg_rs::utils::{get_ggg_path, GggError};
@@ -70,6 +72,12 @@ fn driver(always_yes: bool) -> Result<bool, SetupError> {
             ggg_path.join("windows").join("gnd").join("em27.gnd"),
         ),
         CreateFileStep::new_boxed(EM27_QC, ggg_path.join("tccon").join("EXAMPLE_EM27_qc.dat")),
+        CreateFileStep::new_boxed(
+            EM27_EXTRA_FILTERS,
+            ggg_path
+                .join("tccon")
+                .join("EXAMPLE_EM27_extra_filters.json"),
+        ),
         CreateFileStep::new_boxed(
             EM27_ADCFS,
             ggg_path
