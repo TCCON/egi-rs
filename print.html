@@ -384,11 +384,11 @@ Assuming we want to run the 1st, 2nd, and 3rd of Apr 2024, the command is:</p>
 This may take a minute or two to run (it inspects the headers of every interferogram, which adds up with a lot of them), but will create:</p>
 <ul>
 <li>three run directories: <code>20240401</code>, <code>20240402</code>, and <code>20240403</code> in <code>/data/xx/spectra</code>, and</li>
-<li>a <code>multii2s.sh</code> file in your current directory.</li>
+<li>a <code>multii2s.in</code> file in your current directory.</li>
 </ul>
-<p>The <code>multii2s.sh</code> file is a script that will run each day's interferograms through I2S.
-It can be run in serial with <code>bash multii2s.sh</code>, but if your system has the <a href="https://doi.org/10.5281/zenodo.1146014"><code>parallel</code> tool</a>, we can run the days in parallel with the command:</p>
-<pre><code class="language-bash">$ parallel -t --delay=1 -j4 &lt; multii2s.sh
+<p>The <code>multii2s.in</code> file is a script that will run each day's interferograms through I2S.
+It can be run in serial with <code>bash multii2s.in</code>, but if your system has the <a href="https://doi.org/10.5281/zenodo.1146014"><code>parallel</code> tool</a>, we can run the days in parallel with the command:</p>
+<pre><code class="language-bash">$ parallel -t --delay=1 -j4 &lt; multii2s.in
 </code></pre>
 <p>The <code>-j</code> argument specifies how many concurrent tasks to run, here we use 4, but you can use more or less (depending on your system).
 Note that, if you are working over an SSH connection, it may be a good idea to run this command in something like <a href="https://www.gnu.org/software/screen/">screen</a>
