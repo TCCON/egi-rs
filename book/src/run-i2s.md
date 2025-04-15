@@ -56,13 +56,13 @@ Note that the start and end dates _must_ be given in the YYYY-MM-DD, a.k.a. %Y-%
 This may take a minute or two to run (it inspects the headers of every interferogram, which adds up with a lot of them), but will create:
 
 - three run directories: `20240401`, `20240402`, and `20240403` in `/data/xx/spectra`, and
-- a `multii2s.sh` file in your current directory.
+- a `multii2s.in` file in your current directory.
 
-The `multii2s.sh` file is a script that will run each day's interferograms through I2S.
-It can be run in serial with `bash multii2s.sh`, but if your system has the [`parallel` tool](https://doi.org/10.5281/zenodo.1146014), we can run the days in parallel with the command:
+The `multii2s.in` file is a script that will run each day's interferograms through I2S.
+It can be run in serial with `bash multii2s.in`, but if your system has the [`parallel` tool](https://doi.org/10.5281/zenodo.1146014), we can run the days in parallel with the command:
 
 ```bash
-$ parallel -t --delay=1 -j4 < multii2s.sh
+$ parallel -t --delay=1 -j4 < multii2s.in
 ```
 
 The `-j` argument specifies how many concurrent tasks to run, here we use 4, but you can use more or less (depending on your system).
