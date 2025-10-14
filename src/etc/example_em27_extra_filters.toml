@@ -1,0 +1,12 @@
+# This is an example filter TOML file
+# See the online documentation at https://tccon.github.io/ggg-rs/postproc/add_nc_flags_toml.html
+# for details on the available options and the overall format.
+[[groups]]
+[[groups.filters]]
+filter_var = "o2_7885_cl"
+less_than = 0.05
+
+[flags]
+flag = 9
+existing_flags = "error"
+flag_type = "manual"

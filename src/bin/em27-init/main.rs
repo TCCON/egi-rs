@@ -76,7 +76,7 @@ fn driver(always_yes: bool) -> Result<bool, SetupError> {
             EM27_EXTRA_FILTERS,
             ggg_path
                 .join("tccon")
-                .join("EXAMPLE_EM27_extra_filters.json"),
+                .join("EXAMPLE_EM27_extra_filters.toml"),
         ),
         CreateFileStep::new_boxed(
             EM27_ADCFS,

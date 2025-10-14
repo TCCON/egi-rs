@@ -9,5 +9,5 @@
 {GGGPATH}/bin/write_official_output_file {RUNLOG}.vav.ada.aia
 {GGGPATH}/bin/apply_manual_flags {RUNLOG}.vav.ada.aia.oof
 {GGGPATH}/bin/write_netcdf {RUNLOG}.tav
-{GGGPATH}/bin/add_nc_flags json -i --nc-file {SITE_ID}*.private.nc {GGGPATH}/tccon/{SITE_ID}_extra_filters.json
+{GGGPATH}/bin/add_nc_flags toml -i --nc-file {SITE_ID}*.private.nc {GGGPATH}/tccon/{SITE_ID}_extra_filters.toml
 {GGGPATH}/bin/write_aux {RUNLOG}.mav

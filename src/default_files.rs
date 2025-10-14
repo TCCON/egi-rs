@@ -19,7 +19,7 @@ mod inner {
     pub static FLIMIT_MIDIR: &'static str = include_str!("etc/flimit-mid-ir.i2s");
     pub static EM27_WINDOWS: &'static str = include_str!("etc/em27_windows.gnd");
     pub static EM27_EXTRA_FILTERS: &'static str =
-        include_str!("etc/example_em27_extra_filters.json");
+        include_str!("etc/example_em27_extra_filters.toml");
     pub static EM27_QC: &'static str = include_str!("etc/example_em27_qc.dat");
     pub static EM27_ADCFS: &'static str = include_str!("etc/corrections_airmass_postavg.em27.dat");
     pub static EM27_AICFS: &'static str = include_str!("etc/corrections_insitu_postavg.em27.dat");
@@ -34,7 +34,7 @@ mod inner {
     pub static FLIMIT_MIDIR: &'static str = include_str!(r"etc\flimit-mid-ir.i2s");
     pub static EM27_WINDOWS: &'static str = include_str!(r"etc\em27_windows.gnd");
     pub static EM27_EXTRA_FILTERS: &'static str =
-        include_str!(r"etc\example_em27_extra_filters.json");
+        include_str!(r"etc\example_em27_extra_filters.toml");
     pub static EM27_QC: &'static str = include_str!(r"etc\example_em27_qc.dat");
     pub static EM27_ADCFS: &'static str = include_str!(r"etc\corrections_airmass_postavg.em27.dat");
     pub static EM27_AICFS: &'static str = include_str!(r"etc\corrections_insitu_postavg.em27.dat");
