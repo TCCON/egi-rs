@@ -47,7 +47,7 @@ fn main() -> ExitCode {
     }
 }
 
-/// Generate an I2S catalogue for EM27 interferograms
+/// Ensure that your GGGPATH is configured to run EGI-RS
 #[derive(Debug, clap::Parser)]
 struct Cli {
     #[command(flatten)]

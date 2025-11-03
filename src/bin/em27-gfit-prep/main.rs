@@ -61,9 +61,20 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum PrepActions {
+    /// List the directories to include in the data partition file given the
+    /// I2S directory pattern explicitly.
     ListDataPartitionsDaily(DailyCli),
+
+    /// List the directories to include in the data partition file using the I2S JSON
+    /// run files as input.
     ListDataPartitionsDailyJson(DailyJsonCli),
+
+    /// List the spectra for to process for specific days in the correct order
+    /// given the I2S directory pattern explicitly.
     ListSpectraDaily(DailyCli),
+
+    /// Prepare a GGG run directory, modified to work for EM27s, from a given
+    /// or selected runlog.
     EgiGsetup(GsetupCli),
 }
 
@@ -96,6 +107,7 @@ pub(crate) struct DailyCli {
 
 #[derive(Debug, Args)]
 pub(crate) struct DailyJsonCli {
+    /// Path to a JSON file used to run I2S for the days of interest
     json_file: PathBuf,
 
     /// The two-letter site ID to use in spectrum names.
