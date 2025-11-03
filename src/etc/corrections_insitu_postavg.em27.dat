@@ -13,7 +13,7 @@ AICF_Err (uncertainties) are 1-sigma standard deviations from the best fit.
  Gas     AICF  AICF_Err  WMO_Scale
 "xco2"   1.0076  0.0004  "WMO CO2 X2007"
 "xch4"   0.9999  0.0004  "WMO CH4 X2004"
-"xn2o"   0.9638  0.0100  "NOAA 2006A"
+"xn2o"   0.9638  0.0100  "UNKNOWN"
 "xco"    1.0000  0.0030  "N/A"
 "xh2o"   1.0183  0.0100  "UNKNOWN"
 "xluft"  1.0000  0.0001  "UNKNOWN"
