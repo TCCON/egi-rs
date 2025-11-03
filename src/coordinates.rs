@@ -149,4 +149,3 @@ impl TryFrom<&Path> for CoordinateFileType {
         }
     }
 }
-

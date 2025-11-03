@@ -546,4 +546,3 @@ fn write_parallel_file(
 
     Ok(())
 }
-

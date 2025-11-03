@@ -1,5 +1,6 @@
 use std::{
-    io::{BufRead, BufReader, Read, Write}, path::Path
+    io::{BufRead, BufReader, Read, Write},
+    path::Path,
 };
 
 use itertools::Itertools;
@@ -80,7 +81,6 @@ pub struct MenuEntry {
     pub description: Option<String>,
 }
 
-
 pub fn add_menu_entry(file: &Path, value: &str, description: Option<&str>) -> std::io::Result<()> {
     let mut current_contents = String::new();
     {
@@ -109,7 +109,6 @@ pub fn add_menu_entry(file: &Path, value: &str, description: Option<&str>) -> st
         }
     }
 
-
     // Since all OSes other than pre-OSX Mac use a line feed in their newline, check if the
     // last character is a newline. If so, we can just append to the end of the current contents.
     // Otherwise, check if the last line is all whitespace. If so, we can just replace that line,
@@ -125,8 +124,9 @@ pub fn add_menu_entry(file: &Path, value: &str, description: Option<&str>) -> st
     } else {
         log::warn!("Adding entry to empty menu file, {}", file.display());
     }
-    
-    let mut ext = file.extension()
+
+    let mut ext = file
+        .extension()
         .map(|ext| ext.to_string_lossy().to_string())
         .unwrap_or_else(|| String::new());
     ext.push_str(".bak");
@@ -152,7 +152,7 @@ fn find_nth_word_index(s: &str, n: usize) -> Option<usize> {
         }
 
         if iword == n + 1 {
-            return Some(ichar)
+            return Some(ichar);
         }
     }
 

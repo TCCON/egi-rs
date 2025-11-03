@@ -169,4 +169,3 @@ fn list_ordered_spectra_daily(
     })?;
     Ok(sorted_spec)
 }
-

@@ -24,7 +24,11 @@ struct MetArgReplacer {
 }
 
 impl PatternReplacer for MetArgReplacer {
-    fn get_replacement_value(&self, key: &str, fmt: Option<&str>) -> Result<Cow<'_, str>, PatternError> {
+    fn get_replacement_value(
+        &self,
+        key: &str,
+        fmt: Option<&str>,
+    ) -> Result<Cow<'_, str>, PatternError> {
         match key {
             "FIRST_IGRAM_TIME" => {
                 let fmt = fmt.unwrap_or(DEFAULT_TIME_FMT);

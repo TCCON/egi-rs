@@ -1,18 +1,21 @@
-use std::{env, path::{Path, PathBuf}};
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 
-pub mod default_files;
-pub mod utils;
 pub mod config;
 pub mod coordinates;
-pub mod meteorology;
+pub mod default_files;
 pub mod i2s_catalog;
+pub mod meteorology;
+pub mod utils;
 
 pub const CATALOG_FILL_FLOAT_F32: f32 = -99.0;
 pub const CATALOG_FILL_FLOAT_F64: f64 = -99.0;
 
 /// If `p` is already an absolute path, return it unchanged. Otherwise, make it relative to
-/// the parent directory of `config_file`. 
-/// 
+/// the parent directory of `config_file`.
+///
 /// # Panics
 /// Panics if it cannot get the parent directory of `config_file`, which should only happen
 /// if a root directory was given instead of a file, so this is considered an internal mistake.

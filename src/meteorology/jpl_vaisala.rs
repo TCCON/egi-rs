@@ -1,6 +1,6 @@
-use std::{path::Path, fmt::Display};
+use std::{fmt::Display, path::Path};
 
-use chrono::{FixedOffset, DateTime, NaiveDate, NaiveTime, TimeZone};
+use chrono::{DateTime, FixedOffset, NaiveDate, NaiveTime, TimeZone};
 use itertools::Itertools;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -27,20 +27,22 @@ pub(super) enum JplMetError {
     InvalidTime(NaiveDate, NaiveTime, FixedOffset),
 }
 
-pub(super) fn read_jpl_vaisala_met(met_file: &Path, tz_offset: FixedOffset) -> Result<Vec<MetEntry>, JplMetError> {
+pub(super) fn read_jpl_vaisala_met(
+    met_file: &Path,
+    tz_offset: FixedOffset,
+) -> Result<Vec<MetEntry>, JplMetError> {
     let contents = read_unknown_encoding_file(met_file)?;
     let mut lines = contents.as_str().lines();
 
     // Identify the indices for the quantities we care about
-    let header_line = lines.next()
-        .ok_or_else(|| JplMetError::HeaderLineMissing)?;
+    let header_line = lines.next().ok_or_else(|| JplMetError::HeaderLineMissing)?;
     let header_line = header_line.split(',').collect_vec();
     let column_inds = header_to_inds(&header_line)?;
 
     // Convert each line into a met entry. Skip lines that look like "20230826,16:14,0R2,Ta=0.0#,Ua=0.0#,Pa=0.0#",
     // those are weird junk lines that happen usually at the start of the recording.
     let mut met_data = vec![];
-    
+
     for line in lines {
         if line.contains('#') {
             // this is one of those junk lines
@@ -53,27 +55,47 @@ pub(super) fn read_jpl_vaisala_met(met_file: &Path, tz_offset: FixedOffset) -> R
         let humidity = parse_line_numeric_part(&parts, Col::RH, &column_inds)?;
         let datetime = parse_line_datetime(&parts, &column_inds, tz_offset)?;
 
-        met_data.push(MetEntry { datetime, temperature: Some(temperature), pressure, humidity: Some(humidity) })
+        met_data.push(MetEntry {
+            datetime,
+            temperature: Some(temperature),
+            pressure,
+            humidity: Some(humidity),
+        })
     }
 
     Ok(met_data)
 }
 
-
-fn parse_line_datetime(parts: &[&str], inds: &ColInds, offset: FixedOffset) -> Result<DateTime<FixedOffset>, JplMetError> {
-    let yyyymmdd_str = parts.get(inds.date)
+fn parse_line_datetime(
+    parts: &[&str],
+    inds: &ColInds,
+    offset: FixedOffset,
+) -> Result<DateTime<FixedOffset>, JplMetError> {
+    let yyyymmdd_str = parts
+        .get(inds.date)
         .ok_or_else(|| JplMetError::LineTooShort(Col::Date))?;
-    let hhmm_str = parts.get(inds.time)
+    let hhmm_str = parts
+        .get(inds.time)
         .ok_or_else(|| JplMetError::LineTooShort(Col::Time))?;
 
-    let date = NaiveDate::parse_from_str(&yyyymmdd_str, "%Y%m%d")
-        .map_err(|e| JplMetError::ParsingError(Col::Date, format!("expected YYYYMMDD, got {yyyymmdd_str}. Parsing error was {e}")))?;
-    let time = NaiveTime::parse_from_str(&hhmm_str, "%H:%M")
-        .map_err(|e| JplMetError::ParsingError(Col::Time, format!("expected HH:MM, got {hhmm_str}. Parsing error was {e}")))?;
+    let date = NaiveDate::parse_from_str(&yyyymmdd_str, "%Y%m%d").map_err(|e| {
+        JplMetError::ParsingError(
+            Col::Date,
+            format!("expected YYYYMMDD, got {yyyymmdd_str}. Parsing error was {e}"),
+        )
+    })?;
+    let time = NaiveTime::parse_from_str(&hhmm_str, "%H:%M").map_err(|e| {
+        JplMetError::ParsingError(
+            Col::Time,
+            format!("expected HH:MM, got {hhmm_str}. Parsing error was {e}"),
+        )
+    })?;
 
     match offset.from_local_datetime(&date.and_time(time)) {
         chrono::LocalResult::Single(t) => Ok(t),
-        chrono::LocalResult::None | chrono::LocalResult::Ambiguous(_, _) => Err(JplMetError::InvalidTime(date, time, offset)),
+        chrono::LocalResult::None | chrono::LocalResult::Ambiguous(_, _) => {
+            Err(JplMetError::InvalidTime(date, time, offset))
+        }
     }
 }
 
@@ -92,17 +114,17 @@ fn parse_line_numeric_part(parts: &[&str], col: Col, inds: &ColInds) -> Result<f
         _ => panic!("Tried to call parse_line_numeric_part with col = {col}, a non-numeric column"),
     };
 
-    let s = parts.get(i)
-        .ok_or_else(|| JplMetError::LineTooShort(col))?;
+    let s = parts.get(i).ok_or_else(|| JplMetError::LineTooShort(col))?;
 
-    let s = re.captures(s)
+    let s = re
+        .captures(s)
         .map(|c| c.get(1))
         .flatten()
         .ok_or_else(|| JplMetError::ParsingError(col, format!("does not match pattern {pat}")))?
         .as_str();
-        
 
-    let v = s.parse::<f64>()
+    let v = s
+        .parse::<f64>()
         .map_err(|e| JplMetError::ParsingError(col, e.to_string()))?;
 
     Ok(v)
@@ -114,7 +136,7 @@ pub(super) enum Col {
     Time,
     Pres,
     Temp,
-    RH
+    RH,
 }
 
 impl Display for Col {
@@ -124,11 +146,10 @@ impl Display for Col {
             Col::Temp => write!(f, "Temperature"),
             Col::RH => write!(f, "Humidity"),
             Col::Date => write!(f, "YYYYMMDD"),
-            Col::Time => write!(f, "HH:MM")
+            Col::Time => write!(f, "HH:MM"),
         }
     }
 }
-
 
 #[derive(Debug, Default)]
 struct ColInds {
@@ -136,7 +157,7 @@ struct ColInds {
     time: usize,
     pres: usize,
     temp: usize,
-    rh: usize
+    rh: usize,
 }
 
 fn header_to_inds(header: &[&str]) -> Result<ColInds, JplMetError> {
