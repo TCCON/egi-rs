@@ -240,11 +240,11 @@ fn create_catalog_entry_for_igram(
     let entry = i2s::OpusCatalogueEntry::build(igram_name)
         .with_time(zpd_time.year(), zpd_time.month(), zpd_time.day(), run)
         .change_context_lazy(|| CatalogError::EntryCreationError(igram.to_path_buf()))?
-        .with_coordinates(lat, lon, alt)
+        .with_coordinates(lat as f32, lon as f32, alt as f32)
         .change_context_lazy(|| CatalogError::EntryCreationError(igram.to_path_buf()))?
-        .with_instrument(tins, met_pres, met_rh)
-        .with_outside_met(met_temp, met_pres, met_rh)
-        .finalize(CATALOG_FILL_FLOAT_F64)
+        .with_instrument(tins as f32, met_pres as f32, met_rh as f32)
+        .with_outside_met(met_temp as f32, met_pres as f32, met_rh as f32)
+        .finalize(CATALOG_FILL_FLOAT_F32)
         .change_context_lazy(|| CatalogError::EntryCreationError(igram.to_path_buf()))?;
 
     Ok(entry)
