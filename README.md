@@ -1,6 +1,10 @@
 # EGIRS (EM27/SUN GGG Interferogram processing suite in Rust)
 
-A rewrite of the very useful [EGI](https://tccon-wiki.caltech.edu/Main/EGI) scripts in Rust.
+A rewrite of the useful [EGI](https://tccon-wiki.caltech.edu/Main/EGI) scripts in Rust.
+
+## Should I use this or the COCCON PROFFAST retrieval?
+
+EM27/SUNs should first and foremost contribute to the [COCCON network](https://www.imkasf.kit.edu/english/COCCON.php), and follow their data processing standards. That includes using the PROFFAST retrieval and delivering data to the KIT archive. Use of EGI to process EM27/SUN data should be considered for secondary research purposes only.
 
 ## Status and roadmap
 
