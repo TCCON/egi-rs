@@ -96,5 +96,24 @@ warning: be sure to add `/home/you/ggg/bin` to your PATH to be able to run the i
 Again, we can ignore that warning.
 The final step is to run the `em27-init` program we just installed.
 This will add some extra EM27/SUN-specific files to your `$GGGPATH`.
-It will print out a summary; all steps should read "OK".
+It will print out a summary; all steps should read "OK" like so:
+
+```
+Summary:
+   OK    Make directory $GGGPATH/egi
+   OK    Create 'egi_config.toml' file
+   OK    Create 'em27.gnd' file
+   OK    Create 'EXAMPLE_EM27_qc.dat' file
+   OK    Create 'EXAMPLE_EM27_extra_filters.toml' file
+   OK    Create 'corrections_airmass_postavg.em27.dat' file
+   OK    Create 'corrections_insitu_postavg.em27.dat' file
+   OK    Add em27.gnd entry to windows.men
+   OK    Find program 'collate_tccon_results'
+   OK    Find program 'apply_tccon_airmass_correction'
+   OK    Find program 'apply_tccon_insitu_correction'
+   OK    Find program 'add_nc_flags'
+
+EGI initialization complete.
+```
+
 If not, or if you got a fatal error earlier in the run, correct the issue and try again.
