@@ -30,6 +30,7 @@
         <link rel="stylesheet" id="ayu-highlight-css" href="ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
+        <link rel="stylesheet" href="./mdbook-admonish.css">
 
 
         <!-- Provide site root and default themes to javascript -->
@@ -145,6 +146,9 @@
                         <a href="print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
+                        <a href="https://github.com/TCCON/egi-rs" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
 
                     </div>
                 </div>
@@ -250,8 +254,24 @@ warning: be sure to add `/home/you/ggg/bin` to your PATH to be able to run the i
 <p>Again, we can ignore that warning.
 The final step is to run the <code>em27-init</code> program we just installed.
 This will add some extra EM27/SUN-specific files to your <code>$GGGPATH</code>.
-It will print out a summary; all steps should read "OK".
-If not, or if you got a fatal error earlier in the run, correct the issue and try again.</p>
+It will print out a summary; all steps should read "OK" like so:</p>
+<pre><code>Summary:
+   OK    Make directory $GGGPATH/egi
+   OK    Create 'egi_config.toml' file
+   OK    Create 'em27.gnd' file
+   OK    Create 'EXAMPLE_EM27_qc.dat' file
+   OK    Create 'EXAMPLE_EM27_extra_filters.toml' file
+   OK    Create 'corrections_airmass_postavg.em27.dat' file
+   OK    Create 'corrections_insitu_postavg.em27.dat' file
+   OK    Add em27.gnd entry to windows.men
+   OK    Find program 'collate_tccon_results'
+   OK    Find program 'apply_tccon_airmass_correction'
+   OK    Find program 'apply_tccon_insitu_correction'
+   OK    Find program 'add_nc_flags'
+
+EGI initialization complete.
+</code></pre>
+<p>If not, or if you got a fatal error earlier in the run, correct the issue and try again.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="location"><a class="header" href="#location">Location</a></h1>
 <p>EGI v2 prefers JSON files to specify the latitude, longitude, and altitude at which the EM27 was positioned.
 Unlike version 1, which recommended using coordinate files stored in your <code>EGIPATH</code>, we recommend for version 2
@@ -423,6 +443,48 @@ When it completes, you will have spectra in each of the run directories.</p>
 <p>This means that your <a href="./igm-coords.html">coordinate file</a> did not match any of the expected formats.
 That might mean you are missing one of the required fields (or misspelled one), or that a value is not of the proper type.
 For instance, if any of "longitude", "latitude", or "altitude" are strings or <code>null</code>, that will cause this error.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="data-partition"><a class="header" href="#data-partition">Data partition</a></h1>
+<p>GGG uses a "data partition" file to determine which directories to search for spectra to process.
+This is simply a text file with one directory per line, located at <code>$GGGPATH/config/data_part.lst</code>.
+EGI-RS includes a program to help add directories to this file.</p>
+<div id="admonition-note" class="admonition admonish-note" role="note" aria-labelledby="admonition-note-title">
+<div class="admonition-title">
+<div id="admonition-note-title">
+<p>Note</p>
+</div>
+<a class="admonition-anchor-link" href="data-part.html#admonition-note"></a>
+</div>
+<div>
+<p>If you edit the <code>data_part.lst</code> file by hand, a command mistake in this file is to
+forget to include a trailing path separator. That is, <code>/home/user/spectra/</code> is correct
+to indicate that the spectra can be found in the <code>spectra</code> directory in the user's home
+directory, but <code>/home/user/spectra</code> will cause <code>gsetup</code> to look in <code>/home/user</code> for spectra
+with names <em>starting with</em> "spectra".</p>
+</div>
+</div>
+<p>The simplest way to list the directories that need to be added to this file is to use
+the <code>em27-gfit-prep</code> command's <code>list-data-partitions-daily-json</code> subcommand.
+For this example, let's assume that you have the JSON file <code>demo.json</code> we used in the
+<a href="./run-i2s.html">run-i2s</a> section and we want to run it for the same two days.
+Now our command is:</p>
+<pre><code>$ em27-gfit-prep list-data-partitions-daily-json demo.json xx 2024-04-01 2024-04-03
+</code></pre>
+<p>This would print out two lines with the directories you need to add to the <code>data_part.lst</code> file:</p>
+<pre><code>/data/xx/spectra/20240401/spectra/
+/data/xx/spectra/20240402/spectra/
+</code></pre>
+<p>This comes from the <code>run_dir_pattern</code> that we defined in our JSON file, which remember was <code>/data/{SITE_ID}/spectra/{DATE:%Y%m%d}</code>.
+(The final "spectra" path component is always added, since that is built into the EGI-RS run directory structure for I2S.)
+These are the exact lines you would add to <code>$GGGPATH/config/data_part.lst</code>.
+You can either do this manually (by editing <code>data_part.lst</code> with a text editor and copying these into it), or
+by using shell redirection to append these directly.
+Assuming you are using a Unix-y shell like Bash or Zsh, that would look like this:</p>
+<pre><code>$ em27-gfit-prep list-data-partitions-daily-json demo.json xx 2024-04-01 2024-04-03 &gt;&gt; $GGGPATH/config/data_part.lst
+</code></pre>
+<p>Note that this does not do anything to check that these paths don't already exist in <code>data_part.lst</code>.
+If they are duplicated, it should not hurt anything, but may lead to a rather long and messy <code>data_part.lst</code> file
+(and may slow down the process of searching for spectra during sunrun/runlog creation and retrieval if it has
+too many directories to search).</p>
 
                     </main>
 
