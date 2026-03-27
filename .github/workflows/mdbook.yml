@@ -1,3 +1,5 @@
+# !! Any actions used should pin to a specific commit to reduce
+# !! vulnerability to a supply chain attack.
 name: Deploy mdBook
 on:
   push:
@@ -7,21 +9,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      # Pinned to v6.0.2 commit on 26 Mar 2026
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup mdBook
-        uses: peaceiris/actions-mdbook@v2
+        # Pinned to v2 commit on 26 Mar 2026
+        uses: peaceiris/actions-mdbook@ee69d230fe19748b7abf22df32acaa93833fad08
         with:
-          # mdbook-version: '0.4.37'
-          mdbook-version: 'latest'
+          # 2026-02-11: 0.5+ is not yet compatible with mdbook-admonish, see https://github.com/tommilligan/mdbook-admonish/issues/233
+          mdbook-version: '0.4.52'
       - name: Install mdbook-admonish
-        uses: baptiste0928/cargo-install@v3
+        # Pinned to the v3 commit as of 26 Mar 2026
+        uses: baptiste0928/cargo-install@f204293d9709061b7bc1756fec3ec4e2cd57dec0
         with:
           crate: mdbook-admonish
       - run: mdbook build "./book"
       - run: ls ./book/book/index.html
       - name: Deploy
-        uses: peaceiris/actions-gh-pages@v3
+        # Pinned to v4.0.0 commit on 26 Mar 2026
+        uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: "./book/book"
